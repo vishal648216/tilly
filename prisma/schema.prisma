@@ -1,0 +1,291 @@
+// Taily - Database Schema
+// Double-entry accounting ledger (immutable, append-only)
+// SQLite = free, no server needed
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH & USERS
+// ============================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships CompanyMember[]
+  sessions    Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ============================================================
+// COMPANIES (multi-company support)
+// ============================================================
+
+model Company {
+  id           String   @id @default(cuid())
+  name         String
+  legalName    String?
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  gstin        String?
+  pan          String?
+  upiId        String?  // UPI VPA for Dynamic QR code (e.g. business@upi)
+  bankName     String?  // e.g. HDFC Bank, State Bank of India
+  accountNo    String?  // Bank Account Number
+  ifscCode     String?  // IFSC Code
+  branchName   String?  // Branch Name
+  terms        String?  // Default Terms & Conditions on Invoice
+  currency     String   @default("INR")
+  financialYear String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  members   CompanyMember[]
+  accounts  Account[]
+  parties   Party[]
+  items     Item[]
+  vouchers  Voucher[]
+  invoices  Invoice[]
+  expenses  Expense[]
+}
+
+model CompanyMember {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String   @default("ADMIN") // ADMIN, ACCOUNTANT, VIEWER
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+// ============================================================
+// CHART OF ACCOUNTS (ledger master)
+// ============================================================
+
+model Account {
+  id        String   @id @default(cuid())
+  companyId String
+  code      String   // e.g. "1001"
+  name      String   // e.g. "Cash in Hand"
+  type      String   // ASSET, LIABILITY, EQUITY, INCOME, EXPENSE
+  groupId   String?  // for grouping (Tally-style groups)
+  openingBalance Decimal @default(0) // stored in paise-safe decimal
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries   VoucherEntry[]
+  expenses  Expense[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+}
+
+// ============================================================
+// PARTIES (Customers & Vendors)
+// ============================================================
+
+model Party {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  type         String   @default("CUSTOMER") // CUSTOMER, VENDOR, BOTH
+  email        String?
+  phone        String?
+  gstin        String?
+  pan          String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  openingBalance Decimal @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices  Invoice[]
+
+  @@index([companyId])
+}
+
+// ============================================================
+// ITEMS / STOCK
+// ============================================================
+
+model Item {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  sku         String?
+  barcode     String?
+  category    String?
+  type        String   @default("PRODUCT") // PRODUCT, SERVICE
+  hsn         String?  // HSN/SAC code for GST
+  unit        String   @default("PCS")
+  salePrice   Decimal  @default(0)
+  purchasePrice Decimal @default(0)
+  gstRate     Decimal  @default(0) // 0, 5, 12, 18, 28
+  stock       Decimal  @default(0)
+  minStock    Decimal  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceLines InvoiceLine[]
+
+  @@index([companyId])
+}
+
+// ============================================================
+// VOUCHERS - the heart of double-entry
+// ============================================================
+
+model Voucher {
+  id          String   @id @default(cuid())
+  companyId   String
+  voucherNo   String
+  type        String   // SALES, PURCHASE, PAYMENT, RECEIPT, JOURNAL, CONTRA
+  date        DateTime
+  narration   String?
+  partyId     String?
+  invoiceId   String?
+  isReversed  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries     VoucherEntry[]
+  invoices    Invoice[]
+  expenses    Expense[]
+
+  @@unique([companyId, voucherNo])
+  @@index([companyId, date])
+  @@index([companyId, type])
+}
+
+// Each voucher has 2+ entries that MUST balance (sum of debits = sum of credits)
+model VoucherEntry {
+  id        String   @id @default(cuid())
+  voucherId String
+  accountId String
+  debit     Decimal  @default(0)
+  credit    Decimal  @default(0)
+
+  voucher   Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([voucherId])
+  @@index([accountId])
+}
+
+// ============================================================
+// INVOICES (GST billing - sits on top of vouchers)
+// ============================================================
+
+model Invoice {
+  id           String   @id @default(cuid())
+  companyId    String
+  invoiceNo    String
+  type         String   @default("SALES") // SALES, PURCHASE
+  partyId      String?
+  date         DateTime
+  dueDate      DateTime?
+  subTotal     Decimal  @default(0)
+  cgstTotal    Decimal  @default(0)
+  sgstTotal    Decimal  @default(0)
+  igstTotal    Decimal  @default(0)
+  cessTotal    Decimal  @default(0)
+  roundOff     Decimal  @default(0)
+  grandTotal   Decimal  @default(0)
+  paidAmount   Decimal  @default(0)
+  status       String   @default("UNPAID") // UNPAID, PARTIAL, PAID
+  notes        String?
+  voucherId    String?  // link to the auto-created voucher
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party        Party?        @relation(fields: [partyId], references: [id])
+  lines        InvoiceLine[]
+  voucher      Voucher?      @relation(fields: [voucherId], references: [id])
+
+  @@unique([companyId, invoiceNo])
+  @@index([companyId, date])
+  @@index([partyId])
+}
+
+model InvoiceLine {
+  id        String   @id @default(cuid())
+  invoiceId String
+  itemId    String?
+  name      String   // item name (snapshot)
+  hsn       String?
+  qty       Decimal  @default(1)
+  rate      Decimal  @default(0)
+  amount    Decimal  @default(0)
+  gstRate   Decimal  @default(0)
+  cgst      Decimal  @default(0)
+  sgst      Decimal  @default(0)
+  igst      Decimal  @default(0)
+
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item      Item?     @relation(fields: [itemId], references: [id])
+
+  @@index([invoiceId])
+}
+
+// ============================================================
+// EXPENSES (Daily expense tracker linked to ledger)
+// ============================================================
+
+model Expense {
+  id          String   @id @default(cuid())
+  companyId   String
+  expenseDate DateTime @default(now())
+  category    String   // Rent, Salaries, Electricity, Fuel, Maintenance, Office Supplies, Tea/Refreshment, General
+  amount      Decimal  @default(0)
+  paymentMode String   @default("Cash") // Cash, Bank, UPI, Cheque
+  accountId   String   // Expense Account Head (5100 Rent, etc.)
+  paidFromId  String   // Payment Account Head (1001 Cash, 1002 Bank)
+  voucherId   String?  // Linked double-entry payment voucher
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  voucher     Voucher? @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, expenseDate])
+  @@index([accountId])
+}
+
