@@ -10,10 +10,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    const cleanEmail = email.trim().toLowerCase();
+    let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     
     // Auto-seed demo store if logging in with demo credentials on a fresh database
-    if (!user && email.toLowerCase() === "demo@taily.in" && password === "demo1234") {
+    if (!user && cleanEmail === "demo@taily.in" && password === "demo1234") {
       const passwordHash = await bcrypt.hash("demo1234", 10);
       user = await prisma.user.create({
         data: {
