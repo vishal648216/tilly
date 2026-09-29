@@ -9,7 +9,9 @@ import {
   UserCheck,
   Building2,
   Users,
+  FileText,
   Activity,
+  Server,
   LogOut,
   ArrowRight,
   Menu,
@@ -57,6 +59,11 @@ export default function SuperAdminSidebar({
       icon: Building2,
     },
     {
+      href: "/superadmin/invoices",
+      label: "Global Invoices",
+      icon: FileText,
+    },
+    {
       href: "/superadmin/users",
       label: "All Users",
       icon: Users,
@@ -65,6 +72,11 @@ export default function SuperAdminSidebar({
       href: "/superadmin/activity",
       label: "Live Audit Trail",
       icon: Activity,
+    },
+    {
+      href: "/superadmin/system",
+      label: "System & Backup",
+      icon: Server,
     },
   ];
 
