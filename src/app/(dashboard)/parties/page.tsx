@@ -6,6 +6,9 @@ import SearchBar from "@/components/SearchBar";
 import PartiesExportButton from "./PartiesExportButton";
 import { Users, Plus, ArrowRight } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function PartiesPage({
   searchParams,
 }: {
@@ -20,17 +23,17 @@ export default async function PartiesPage({
   const where: any = { companyId: company.id };
   if (query) {
     where.OR = [
-      { name: { contains: query } },
-      { phone: { contains: query } },
-      { gstin: { contains: query } },
-      { city: { contains: query } },
-      { email: { contains: query } },
+      { name: { contains: query, mode: "insensitive" } },
+      { phone: { contains: query, mode: "insensitive" } },
+      { gstin: { contains: query, mode: "insensitive" } },
+      { city: { contains: query, mode: "insensitive" } },
+      { email: { contains: query, mode: "insensitive" } },
     ];
   }
 
   const parties = await prisma.party.findMany({
     where,
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
   });
 
   return (

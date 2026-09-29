@@ -7,6 +7,9 @@ import SearchBar from "@/components/SearchBar";
 import ItemsExportButton from "./ItemsExportButton";
 import { Package, Wrench, Plus, AlertCircle, Sparkles } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ItemsPage({
   searchParams,
 }: {
@@ -21,17 +24,17 @@ export default async function ItemsPage({
   const where: any = { companyId: company.id };
   if (query) {
     where.OR = [
-      { name: { contains: query } },
-      { sku: { contains: query } },
-      { barcode: { contains: query } },
-      { category: { contains: query } },
-      { hsn: { contains: query } },
+      { name: { contains: query, mode: "insensitive" } },
+      { sku: { contains: query, mode: "insensitive" } },
+      { barcode: { contains: query, mode: "insensitive" } },
+      { category: { contains: query, mode: "insensitive" } },
+      { hsn: { contains: query, mode: "insensitive" } },
     ];
   }
 
   const items = await prisma.item.findMany({
     where,
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
   });
 
   return (

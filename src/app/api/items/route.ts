@@ -2,6 +2,26 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, getCurrentCompany } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const company = await getCurrentCompany();
+    if (!company) return NextResponse.json({ error: "No company" }, { status: 400 });
+
+    const items = await prisma.item.findMany({
+      where: { companyId: company.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ items });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
