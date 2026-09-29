@@ -29,8 +29,8 @@ export default async function PartyLedgerPage({
   let openingBalance = 0;
   let runningBalance = 0;
 
-  if (selectedPartyId) {
-    openingBalance = parseFloat(selectedParty?.openingBalance.toString() || "0");
+  if (selectedPartyId && selectedParty) {
+    openingBalance = parseFloat(selectedParty.openingBalance.toString() || "0");
     runningBalance = openingBalance;
 
     const vouchers = await prisma.voucher.findMany({
@@ -43,15 +43,40 @@ export default async function PartyLedgerPage({
       orderBy: { date: "asc" },
     });
 
-    transactions = vouchers.map((v) => {
-      // For customers (Sundry Debtors): debit increases their balance (they owe us)
-      // For vendors (Sundry Creditors): credit increases their balance (we owe them)
-      const dr = v.entries.reduce((s, e) => s + parseFloat(e.debit.toString()), 0);
-      const cr = v.entries.reduce((s, e) => s + parseFloat(e.credit.toString()), 0);
+    const isVendor = selectedParty.type === "VENDOR";
 
-      // Customer: Dr = sale (they owe more), Cr = payment (they paid)
-      // The "debit" side increases receivable, "credit" decreases
-      runningBalance += dr - cr;
+    transactions = vouchers.map((v) => {
+      // Find entries that represent the Party's ledger impact (Sundry Debtors 1100 or Sundry Creditors 2001)
+      const partyEntries = v.entries.filter(
+        (e) => e.account.code === "1100" || e.account.code === "2001"
+      );
+
+      let dr = 0;
+      let cr = 0;
+
+      if (partyEntries.length > 0) {
+        dr = partyEntries.reduce((s, e) => s + parseFloat(e.debit.toString()), 0);
+        cr = partyEntries.reduce((s, e) => s + parseFloat(e.credit.toString()), 0);
+      } else {
+        // Fallback based on voucher type if specific party account code wasn't matched
+        if (v.type === "SALES") {
+          dr = v.entries.reduce((s, e) => s + parseFloat(e.debit.toString()), 0);
+        } else if (v.type === "RECEIPT" || v.type === "SALES_RETURN") {
+          cr = v.entries.reduce((s, e) => s + parseFloat(e.credit.toString()), 0);
+        } else if (v.type === "PURCHASE") {
+          cr = v.entries.reduce((s, e) => s + parseFloat(e.credit.toString()), 0);
+        } else if (v.type === "PAYMENT" || v.type === "PURCHASE_RETURN") {
+          dr = v.entries.reduce((s, e) => s + parseFloat(e.debit.toString()), 0);
+        }
+      }
+
+      if (isVendor) {
+        // For Vendors: Credit increases payable (we owe them), Debit decreases payable (we paid them)
+        runningBalance += cr - dr;
+      } else {
+        // For Customers: Debit increases receivable (they owe us), Credit decreases receivable (they paid)
+        runningBalance += dr - cr;
+      }
 
       return {
         id: v.id,

@@ -4,6 +4,7 @@
 import { prisma } from "./prisma";
 import { roundTo2 } from "./currency";
 import { Decimal } from "@prisma/client/runtime/library";
+import { DEFAULT_CHART_OF_ACCOUNTS } from "./accounts";
 
 export type InvoiceLineInput = {
   itemId?: string;
@@ -103,30 +104,51 @@ export async function createInvoice(input: CreateInvoiceInput) {
     entries.push({ accountCode: debtorCode, debit: 0, credit: grandTotal });
   }
 
-  // 4. Generate invoice number: INV-000001
+  // 4. Generate invoice number: INV-000001 or PUR-000001
+  const count = await prisma.invoice.count({ where: { companyId, type } });
   const lastInvoice = await prisma.invoice.findFirst({
-    where: { companyId },
-    orderBy: { invoiceNo: "desc" },
+    where: { companyId, type },
+    orderBy: { createdAt: "desc" },
   });
-  const nextSeq = lastInvoice ? parseInt(lastInvoice.invoiceNo.replace(/\D/g, "")) + 1 : 1;
+  let nextSeq = count + 1;
+  if (lastInvoice) {
+    const parsed = parseInt(lastInvoice.invoiceNo.replace(/\D/g, ""));
+    if (!isNaN(parsed) && parsed >= nextSeq) nextSeq = parsed + 1;
+  }
   const invoiceNo = `${isSales ? "INV" : "PUR"}-${String(nextSeq).padStart(6, "0")}`;
 
-  // 5. Generate voucher number
-  const lastVoucher = await prisma.voucher.findFirst({
-    where: { companyId },
-    orderBy: { voucherNo: "desc" },
-  });
-  const vSeq = lastVoucher ? parseInt(lastVoucher.voucherNo.replace(/\D/g, "")) + 1 : 1;
-  const voucherNo = `V-${String(vSeq).padStart(6, "0")}`;
+  // 5. Generate guaranteed unique voucher number
+  const vCount = await prisma.voucher.count({ where: { companyId } });
+  const datePrefix = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const voucherNo = `V-${isSales ? "S" : "P"}-${datePrefix}-${String(vCount + 1).padStart(4, "0")}-${randomSuffix}`;
 
-  // 6. Validate accounts exist
+  // 6. Validate & auto-seed accounts
   const codes = entries.map((e) => e.accountCode);
-  const accounts = await prisma.account.findMany({
+  let accounts = await prisma.account.findMany({
     where: { companyId, code: { in: codes } },
   });
-  if (accounts.length !== new Set(codes).size) {
-    throw new Error("One or more accounts not found. Check chart of accounts.");
+  const existingCodes = new Set(accounts.map((a) => a.code));
+  const missingCodes = codes.filter((c) => !existingCodes.has(c));
+
+  if (missingCodes.length > 0) {
+    for (const missingCode of missingCodes) {
+      const def = DEFAULT_CHART_OF_ACCOUNTS.find((d) => d.code === missingCode);
+      if (def) {
+        const created = await prisma.account.create({
+          data: {
+            companyId,
+            code: def.code,
+            name: def.name,
+            type: def.type,
+            groupId: def.groupId,
+          },
+        });
+        accounts.push(created);
+      }
+    }
   }
+
   const accountMap = new Map(accounts.map((a) => [a.code, a.id]));
 
   // 7. Create everything atomically

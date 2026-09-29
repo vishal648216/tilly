@@ -1,11 +1,7 @@
-// Taily - Payment Receive logic
-// When customer pays against an invoice, this:
-// 1. Creates a RECEIPT voucher (Dr Cash/Bank, Cr Sundry Debtors)
-// 2. Updates invoice paidAmount + status (UNPAID → PARTIAL → PAID)
-
 import { prisma } from "./prisma";
 import { Decimal } from "@prisma/client/runtime/library";
 import { roundTo2 } from "./currency";
+import { DEFAULT_CHART_OF_ACCOUNTS } from "./accounts";
 
 export type ReceivePaymentInput = {
   invoiceId: string;
@@ -15,6 +11,26 @@ export type ReceivePaymentInput = {
   reference?: string; // UPI ref, cheque no, etc.
   narration?: string;
 };
+
+async function ensureAccount(companyId: string, preferredCodes: string[]): Promise<string> {
+  const existing = await prisma.account.findFirst({
+    where: { companyId, code: { in: preferredCodes } },
+  });
+  if (existing) return existing.id;
+
+  const targetCode = preferredCodes[0];
+  const def = DEFAULT_CHART_OF_ACCOUNTS.find((d) => d.code === targetCode);
+  const created = await prisma.account.create({
+    data: {
+      companyId,
+      code: def?.code || targetCode,
+      name: def?.name || "Account",
+      type: def?.type || "ASSET",
+      groupId: def?.groupId || "General",
+    },
+  });
+  return created.id;
+}
 
 export async function receivePayment(input: ReceivePaymentInput) {
   const { invoiceId, amount, date, mode, reference, narration } = input;
@@ -43,26 +59,17 @@ export async function receivePayment(input: ReceivePaymentInput) {
   }
 
   // 3. Determine Cash vs Bank account
-  // CASH → 1001 (Cash in Hand), BANK/UPI/CHEQUE → 1003 (Bank of Baroda)
-  const cashOrBankCode = mode === "CASH" ? "1001" : "1003";
-  const debtorCode = "1100"; // Sundry Debtors
+  const cashOrBankId =
+    mode === "CASH"
+      ? await ensureAccount(companyId, ["1001"])
+      : await ensureAccount(companyId, ["1002", "1003"]);
+  const debtorId = await ensureAccount(companyId, ["1100"]);
 
-  const accounts = await prisma.account.findMany({
-    where: { companyId, code: { in: [cashOrBankCode, debtorCode] } },
-  });
-  const accountMap = new Map(accounts.map((a) => [a.code, a.id]));
-
-  if (!accountMap.has(cashOrBankCode) || !accountMap.has(debtorCode)) {
-    throw new Error("Required accounts not found. Check chart of accounts.");
-  }
-
-  // 4. Generate voucher number
-  const lastVoucher = await prisma.voucher.findFirst({
-    where: { companyId },
-    orderBy: { voucherNo: "desc" },
-  });
-  const vSeq = lastVoucher ? parseInt(lastVoucher.voucherNo.replace(/\D/g, "")) + 1 : 1;
-  const voucherNo = `V-${String(vSeq).padStart(6, "0")}`;
+  // 4. Generate guaranteed unique voucher number
+  const vCount = await prisma.voucher.count({ where: { companyId } });
+  const datePrefix = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const voucherNo = `V-REC-${datePrefix}-${String(vCount + 1).padStart(4, "0")}-${randomSuffix}`;
 
   // 5. Determine new status
   let newStatus: string;
@@ -90,12 +97,12 @@ export async function receivePayment(input: ReceivePaymentInput) {
         entries: {
           create: [
             {
-              accountId: accountMap.get(cashOrBankCode)!,
+              accountId: cashOrBankId,
               debit: new Decimal(amount),
               credit: new Decimal(0),
             },
             {
-              accountId: accountMap.get(debtorCode)!,
+              accountId: debtorId,
               debit: new Decimal(0),
               credit: new Decimal(amount),
             },
@@ -154,30 +161,22 @@ export async function makePayment(input: MakePaymentInput) {
 
   if (newPaidAmount > grandTotal + 0.01) {
     throw new Error(
-      `Payment (Rs.${newPaidAmount}) exceeds invoice total (Rs.${grandTotal})`
+      `Payment (₹${newPaidAmount}) exceeds invoice total (₹${grandTotal})`
     );
   }
 
-  // Payment Made: Dr Sundry Creditors (2001), Cr Cash (1001) or Bank (1003)
-  const cashOrBankCode = mode === "CASH" ? "1001" : "1003";
-  const creditorCode = "2001"; // Sundry Creditors
+  // Payment Made: Dr Sundry Creditors (2001), Cr Cash (1001) or Bank (1002/1003)
+  const cashOrBankId =
+    mode === "CASH"
+      ? await ensureAccount(companyId, ["1001"])
+      : await ensureAccount(companyId, ["1002", "1003"]);
+  const creditorId = await ensureAccount(companyId, ["2001"]);
 
-  const accounts = await prisma.account.findMany({
-    where: { companyId, code: { in: [cashOrBankCode, creditorCode] } },
-  });
-  const accountMap = new Map(accounts.map((a) => [a.code, a.id]));
-
-  if (!accountMap.has(cashOrBankCode) || !accountMap.has(creditorCode)) {
-    throw new Error("Required accounts not found. Check chart of accounts.");
-  }
-
-  // Generate voucher number
-  const lastVoucher = await prisma.voucher.findFirst({
-    where: { companyId },
-    orderBy: { voucherNo: "desc" },
-  });
-  const vSeq = lastVoucher ? parseInt(lastVoucher.voucherNo.replace(/\D/g, "")) + 1 : 1;
-  const voucherNo = `V-${String(vSeq).padStart(6, "0")}`;
+  // Generate guaranteed unique voucher number
+  const vCount = await prisma.voucher.count({ where: { companyId } });
+  const datePrefix = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const voucherNo = `V-PAY-${datePrefix}-${String(vCount + 1).padStart(4, "0")}-${randomSuffix}`;
 
   // Determine new status
   let newStatus: string;
@@ -204,12 +203,12 @@ export async function makePayment(input: MakePaymentInput) {
         entries: {
           create: [
             {
-              accountId: accountMap.get(creditorCode)!,
+              accountId: creditorId,
               debit: new Decimal(amount),
               credit: new Decimal(0),
             },
             {
-              accountId: accountMap.get(cashOrBankCode)!,
+              accountId: cashOrBankId,
               debit: new Decimal(0),
               credit: new Decimal(amount),
             },
@@ -232,3 +231,4 @@ export async function makePayment(input: MakePaymentInput) {
 
   return result;
 }
+
