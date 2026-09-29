@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { formatCurrency } from "@/lib/currency";
-import { MessageCircle, Printer, Share2, Check } from "lucide-react";
+import { MessageCircle, Printer, Share2, Check, RotateCcw } from "lucide-react";
 
 export default function InvoiceActions({
+  invoiceId,
   invoiceNo,
+  invoiceType,
   partyName,
   partyPhone,
   grandTotal,
@@ -13,7 +16,9 @@ export default function InvoiceActions({
   status,
   upiId,
 }: {
+  invoiceId?: string;
   invoiceNo: string;
+  invoiceType?: string;
   partyName?: string | null;
   partyPhone?: string | null;
   grandTotal?: number;
@@ -60,6 +65,14 @@ export default function InvoiceActions({
 
   return (
     <div className="flex items-center gap-2">
+      {invoiceType === "SALES" && invoiceId && (
+        <Link
+          href={`/sales-return/new?invoiceId=${invoiceId}`}
+          className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 shadow-xs hover:bg-amber-100 transition-colors"
+        >
+          <RotateCcw className="h-4 w-4 text-amber-700" /> Sales Return
+        </Link>
+      )}
       <a
         href={whatsappUrl}
         target="_blank"

@@ -37,7 +37,9 @@ export default async function InvoiceDetailPage({
           ← Back to Invoices
         </a>
         <InvoiceActions
+          invoiceId={invoice.id}
           invoiceNo={invoice.invoiceNo}
+          invoiceType={invoice.type}
           partyName={invoice.party?.name}
           partyPhone={invoice.party?.phone}
           grandTotal={grand}
