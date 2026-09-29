@@ -168,3 +168,54 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err.message || "Failed to record expense" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const company = await getCurrentCompany();
+    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
+
+    const { searchParams } = new URL(req.url);
+    let id = searchParams.get("id");
+
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body?.id;
+      } catch {
+        // body may be empty
+      }
+    }
+
+    if (!id) {
+      return NextResponse.json({ error: "Expense ID is required" }, { status: 400 });
+    }
+
+    const expense = await prisma.expense.findFirst({
+      where: { id, companyId: company.id },
+    });
+
+    if (!expense) {
+      return NextResponse.json({ error: "Expense not found" }, { status: 404 });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.delete({
+        where: { id: expense.id },
+      });
+
+      if (expense.voucherId) {
+        await tx.voucher.delete({
+          where: { id: expense.voucherId },
+        });
+      }
+    });
+
+    return NextResponse.json({ success: true, message: "Expense deleted successfully" });
+  } catch (err: any) {
+    console.error("Expense deletion error:", err);
+    return NextResponse.json({ error: err.message || "Failed to delete expense" }, { status: 500 });
+  }
+}
+

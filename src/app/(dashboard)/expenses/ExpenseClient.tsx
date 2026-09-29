@@ -16,6 +16,9 @@ import {
   FileText,
   Tag,
   Receipt,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface Account {
@@ -53,6 +56,8 @@ export default function ExpenseClient({
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form State
   const [amount, setAmount] = useState("");
@@ -131,6 +136,26 @@ export default function ExpenseClient({
       setErrorMsg(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteExpense() {
+    if (!expenseToDelete) return;
+    setDeletingId(expenseToDelete.id);
+    try {
+      const res = await fetch(`/api/expenses/${expenseToDelete.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete expense");
+
+      setExpenses((prev) => prev.filter((e) => e.id !== expenseToDelete.id));
+      setExpenseToDelete(null);
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete expense");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -259,12 +284,13 @@ export default function ExpenseClient({
                 <th className="px-6 py-3">Payment Mode</th>
                 <th className="px-6 py-3">Notes</th>
                 <th className="px-6 py-3 text-right">Amount</th>
+                <th className="px-6 py-3 text-center w-16">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     <Wallet className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                     <p className="text-base font-medium text-slate-600">No expenses found</p>
                     <p className="text-xs">Click "Add Expense" to log your first business expense.</p>
@@ -307,6 +333,16 @@ export default function ExpenseClient({
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-red-600 whitespace-nowrap">
                       {formatCurrency(exp.amount)}
+                    </td>
+                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => setExpenseToDelete(exp)}
+                        title="Delete / Remove Expense"
+                        className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -475,6 +511,78 @@ export default function ExpenseClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {expenseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-150">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-red-100 p-2.5 text-red-600">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900">Delete Expense Entry?</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Are you sure you want to delete this expense? This will also remove the corresponding payment voucher from your ledger.
+                </p>
+
+                <div className="mt-4 rounded-xl bg-slate-50 p-3.5 border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Category:</span>
+                    <span className="font-semibold text-slate-800">{expenseToDelete.category}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Amount:</span>
+                    <span className="font-bold text-red-600">{formatCurrency(expenseToDelete.amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Date:</span>
+                    <span className="text-slate-700">
+                      {new Date(expenseToDelete.expenseDate).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                  {expenseToDelete.voucher?.voucherNo && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Voucher:</span>
+                      <span className="font-mono text-slate-700">{expenseToDelete.voucher.voucherNo}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2.5">
+                  <button
+                    type="button"
+                    disabled={deletingId !== null}
+                    onClick={() => setExpenseToDelete(null)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deletingId !== null}
+                    onClick={handleDeleteExpense}
+                    className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    {deletingId ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" /> Delete Expense
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
