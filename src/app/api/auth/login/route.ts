@@ -13,6 +13,21 @@ export async function POST(req: Request) {
     const cleanEmail = email.trim().toLowerCase();
     let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     
+    // Auto-seed Super Admin if logging in with Super Admin credentials
+    if (!user && cleanEmail === "admin@admin.com" && password === "admin@1234") {
+      const passwordHash = await bcrypt.hash("admin@1234", 10);
+      user = await prisma.user.create({
+        data: {
+          email: "admin@admin.com",
+          name: "Super Administrator",
+          passwordHash,
+          phone: "9876543210",
+          role: "SUPER_ADMIN",
+          status: "APPROVED",
+        },
+      });
+    }
+
     // Auto-seed demo store if logging in with demo credentials on a fresh database
     if (!user && cleanEmail === "demo@taily.in" && password === "demo1234") {
       const passwordHash = await bcrypt.hash("demo1234", 10);
@@ -22,6 +37,8 @@ export async function POST(req: Request) {
           name: "Demo User",
           passwordHash,
           phone: "9999999999",
+          role: "USER",
+          status: "APPROVED",
         },
       });
 
@@ -92,8 +109,68 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
+    const isSuperAdmin = user.role === "SUPER_ADMIN" || cleanEmail === "admin@admin.com";
+
+    // Non-superadmin account status check
+    if (!isSuperAdmin) {
+      if (user.status === "PENDING") {
+        return NextResponse.json(
+          {
+            error:
+              "Aapka account verification pending hai. Super Admin ke approve karne ke baad aap login kar sakenge.",
+          },
+          { status: 403 }
+        );
+      }
+      if (user.status === "REJECTED") {
+        return NextResponse.json(
+          {
+            error:
+              "Aapka account registration Super Admin dwara reject kar diya gaya hai. Kripya admin se sampark karein.",
+          },
+          { status: 403 }
+        );
+      }
+      if (user.status === "SUSPENDED") {
+        return NextResponse.json(
+          {
+            error:
+              "Aapka account suspend kar diya gaya hai. Kripya Super Admin se sampark karein.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Ensure role is updated if superadmin
+    if (isSuperAdmin && user.role !== "SUPER_ADMIN") {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "SUPER_ADMIN", status: "APPROVED" },
+      });
+    }
+
     await createSession(user.id);
-    return NextResponse.json({ ok: true });
+
+    // Log Activity
+    try {
+      await prisma.activityLog.create({
+        data: {
+          userId: user.id,
+          userEmail: user.email,
+          action: "USER_LOGIN",
+          details: isSuperAdmin ? "Super Admin logged in" : `User logged in (${user.name})`,
+        },
+      });
+    } catch (e) {
+      // Ignore log error
+    }
+
+    return NextResponse.json({
+      ok: true,
+      isSuperAdmin,
+      redirectTo: isSuperAdmin ? "/superadmin" : "/",
+    });
   } catch (err: any) {
     console.error("Login error:", err);
     return NextResponse.json({ error: err.message || "Login failed" }, { status: 500 });

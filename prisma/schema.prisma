@@ -16,13 +16,18 @@ datasource db {
 // ============================================================
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  phone        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  passwordHash    String
+  phone           String?
+  role            String   @default("USER") // SUPER_ADMIN, USER
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, SUSPENDED
+  approvedAt      DateTime?
+  approvedBy      String?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   memberships CompanyMember[]
   sessions    Session[]
@@ -288,4 +293,24 @@ model Expense {
   @@index([companyId, expenseDate])
   @@index([accountId])
 }
+
+// ============================================================
+// AUDIT & PLATFORM ACTIVITY LOGS (for Super Admin)
+// ============================================================
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userEmail String?
+  companyId String?
+  action    String   // SIGNUP, LOGIN, APPROVE_USER, REJECT_USER, CREATE_INVOICE, DELETE_EXPENSE, etc.
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
 

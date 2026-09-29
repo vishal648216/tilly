@@ -11,16 +11,40 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding Taily database...");
 
+  // 0. Super Admin (Master account)
+  const superAdminPasswordHash = await bcrypt.hash("admin@1234", 10);
+  const superAdmin = await prisma.user.upsert({
+    where: { email: "admin@admin.com" },
+    update: {
+      role: "SUPER_ADMIN",
+      status: "APPROVED",
+      passwordHash: superAdminPasswordHash,
+    },
+    create: {
+      email: "admin@admin.com",
+      name: "Super Administrator",
+      passwordHash: superAdminPasswordHash,
+      phone: "9876543210",
+      role: "SUPER_ADMIN",
+      status: "APPROVED",
+    },
+  });
+  console.log("👑 Super Admin created: admin@admin.com / admin@1234");
+
   // 1. Demo user
   const passwordHash = await bcrypt.hash("demo1234", 10);
   const user = await prisma.user.upsert({
     where: { email: "demo@taily.in" },
-    update: {},
+    update: {
+      status: "APPROVED",
+    },
     create: {
       email: "demo@taily.in",
       name: "Demo User",
       passwordHash,
       phone: "9999999999",
+      role: "USER",
+      status: "APPROVED",
     },
   });
   console.log("✅ User created: demo@taily.in / demo1234");

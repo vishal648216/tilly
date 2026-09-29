@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, getCurrentCompany } from "@/lib/session";
 import Sidebar from "@/components/Sidebar";
 import TopNavbar from "@/components/TopNavbar";
+import SuperAdminBanner from "@/components/SuperAdminBanner";
 
 export default async function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-slate-50/70">
+      {user.role === "SUPER_ADMIN" && <SuperAdminBanner companyName={company.name} />}
       <Sidebar companyName={company.name} />
       <div className="lg:pl-64 flex flex-col min-h-screen">
         <TopNavbar companyName={company.name} userName={user.name} />

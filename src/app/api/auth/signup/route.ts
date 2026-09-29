@@ -105,6 +105,8 @@ export async function POST(req: Request) {
           name: trimmedName,
           passwordHash,
           phone: cleanPhone || null,
+          role: "USER",
+          status: "PENDING",
         },
       });
 
@@ -140,8 +142,27 @@ export async function POST(req: Request) {
       return { user, company };
     });
 
-    await createSession(result.user.id);
-    return NextResponse.json({ ok: true });
+    // Log Activity for Super Admin
+    try {
+      await prisma.activityLog.create({
+        data: {
+          userId: result.user.id,
+          userEmail: result.user.email,
+          companyId: result.company.id,
+          action: "SIGNUP_REQUEST",
+          details: `New registration requested by ${trimmedName} for business "${trimmedCompany}" (${cleanPhone || "No phone"})`,
+        },
+      });
+    } catch (logErr) {
+      console.error("Activity log error:", logErr);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      pendingApproval: true,
+      message:
+        "Aapka registration safalta-purvak ho gaya hai! Super Admin ke approve karne ke baad aap login kar sakenge.",
+    });
   } catch (err: any) {
     console.error("Signup error:", err);
     return NextResponse.json({ error: err.message || "Signup failed. Kripya dobara try karein." }, { status: 500 });

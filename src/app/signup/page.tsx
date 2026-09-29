@@ -39,6 +39,7 @@ export default function SignupPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedSuccess, setSubmittedSuccess] = useState(false);
 
   function update(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -150,13 +151,70 @@ export default function SignupPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Signup failed");
-      router.push("/");
-      router.refresh();
+
+      if (data.pendingApproval) {
+        setSubmittedSuccess(true);
+      } else {
+        router.push("/");
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (submittedSuccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-slate-50 to-teal-50 px-4 py-12">
+        <div className="w-full max-w-lg rounded-3xl border border-emerald-100 bg-white p-8 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
+          <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-600 shadow-inner">
+            <CheckCircle2 className="h-10 w-10" />
+          </div>
+
+          <h2 className="text-2xl font-bold text-slate-900">Registration Submitted!</h2>
+          <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+            Aapka registration safalta-purvak receive ho gaya hai. Suraksha ke liye har naye business account ko{" "}
+            <strong className="text-slate-800 font-semibold">Super Admin dwara verify</strong> kiya jata hai.
+          </p>
+
+          <div className="mt-6 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 text-left text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Name:</span>
+              <span className="font-semibold text-slate-800">{form.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Business / Company:</span>
+              <span className="font-semibold text-slate-800">{form.companyName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Email:</span>
+              <span className="font-mono text-slate-800">{form.email}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Status:</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                ⏳ Pending Admin Approval
+              </span>
+            </div>
+          </div>
+
+          <p className="mt-6 text-xs text-slate-400">
+            Jaise hi Super Admin aapki request accept karenge, aap apne email aur password se turant login kar sakenge.
+          </p>
+
+          <div className="mt-6">
+            <Link
+              href="/login"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-colors"
+            >
+              Go to Login Page <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
