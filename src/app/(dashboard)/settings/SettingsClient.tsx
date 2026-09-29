@@ -1,17 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import UpiQrCode from "@/components/UpiQrCode";
-import { 
-  Settings, 
-  QrCode, 
-  Landmark, 
-  Building2, 
-  FileText, 
-  CheckCircle2, 
-  AlertCircle, 
-  Save 
+import {
+  isValidEmail,
+  isValidPhone,
+  isValidGstin,
+  isValidPan,
+  isValidIfsc,
+  isValidUpi,
+} from "@/lib/validators";
+import {
+  Settings,
+  QrCode,
+  Landmark,
+  Building2,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Save,
+  Phone,
+  Mail,
 } from "lucide-react";
 
 interface Company {
@@ -60,10 +70,62 @@ export default function SettingsClient({ company }: { company: Company }) {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   function update(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  function handleBlur(key: string) {
+    setTouched((t) => ({ ...t, [key]: true }));
+  }
+
+  // --- Validations ---
+  const isUpiValid = useMemo(() => {
+    if (!form.upiId.trim()) return false;
+    return isValidUpi(form.upiId);
+  }, [form.upiId]);
+
+  const isPhoneValid = useMemo(() => {
+    if (!form.phone.trim()) return true;
+    return isValidPhone(form.phone);
+  }, [form.phone]);
+
+  const isEmailValid = useMemo(() => {
+    if (!form.email.trim()) return true;
+    return isValidEmail(form.email);
+  }, [form.email]);
+
+  const isGstinValid = useMemo(() => {
+    if (!form.gstin.trim()) return true;
+    return isValidGstin(form.gstin);
+  }, [form.gstin]);
+
+  const isPanValid = useMemo(() => {
+    if (!form.pan.trim()) return true;
+    return isValidPan(form.pan);
+  }, [form.pan]);
+
+  const isIfscValid = useMemo(() => {
+    if (!form.ifscCode.trim()) return true;
+    return isValidIfsc(form.ifscCode);
+  }, [form.ifscCode]);
+
+  const isAccountNoValid = useMemo(() => {
+    if (!form.accountNo.trim()) return true;
+    const clean = form.accountNo.replace(/[^0-9]/g, "");
+    return clean.length >= 9 && clean.length <= 18;
+  }, [form.accountNo]);
+
+  const isFormValid =
+    form.name.trim().length >= 2 &&
+    isUpiValid &&
+    isPhoneValid &&
+    isEmailValid &&
+    isGstinValid &&
+    isPanValid &&
+    isIfscValid &&
+    isAccountNoValid;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,18 +133,80 @@ export default function SettingsClient({ company }: { company: Company }) {
     setError("");
     setSaved(false);
 
+    setTouched({
+      name: true,
+      upiId: true,
+      phone: true,
+      email: true,
+      gstin: true,
+      pan: true,
+      ifscCode: true,
+      accountNo: true,
+    });
+
+    if (!form.name.trim()) {
+      setError("Company Trade Name zaroori hai.");
+      setLoading(false);
+      return;
+    }
+    if (!isUpiValid) {
+      setError("Valid UPI VPA enter karein (jaise: 9876543210@paytm ya business@okhdfcbank).");
+      setLoading(false);
+      return;
+    }
+    if (form.phone.trim() && !isPhoneValid) {
+      setError("Mobile number 10 digits ka hona chahiye.");
+      setLoading(false);
+      return;
+    }
+    if (form.email.trim() && !isEmailValid) {
+      setError("Valid email format daalein (jaise: billing@mybusiness.in).");
+      setLoading(false);
+      return;
+    }
+    if (form.gstin.trim() && !isGstinValid) {
+      setError("GSTIN format galat hai (15 characters: 24ABCDE1234F1Z5).");
+      setLoading(false);
+      return;
+    }
+    if (form.pan.trim() && !isPanValid) {
+      setError("PAN format galat hai (10 characters: ABCDE1234F).");
+      setLoading(false);
+      return;
+    }
+    if (form.ifscCode.trim() && !isIfscValid) {
+      setError("Bank IFSC code galat hai (11 characters: SBIN0001234 / HDFC0001234).");
+      setLoading(false);
+      return;
+    }
+    if (form.accountNo.trim() && !isAccountNoValid) {
+      setError("Bank Account Number 9 se 18 digits ka hona chahiye.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          name: form.name.trim(),
+          upiId: form.upiId.trim(),
+          phone: form.phone.trim() || null,
+          email: form.email.trim().toLowerCase() || null,
+          gstin: form.gstin.trim().toUpperCase() || null,
+          pan: form.pan.trim().toUpperCase() || null,
+          ifscCode: form.ifscCode.trim().toUpperCase() || null,
+          accountNo: form.accountNo.trim() || null,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update settings");
 
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setTimeout(() => setSaved(false), 4000);
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -100,7 +224,7 @@ export default function SettingsClient({ company }: { company: Company }) {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Company & Invoice Settings</h1>
           <p className="text-sm text-slate-500">
-            Configure UPI QR payments, bank details, tax settings, and invoice print layout
+            UPI QR payments, bank details, tax settings aur invoice print layout configure karein
           </p>
         </div>
       </div>
@@ -108,7 +232,7 @@ export default function SettingsClient({ company }: { company: Company }) {
       {saved && (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 border border-emerald-200">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          Settings updated successfully! Dynamic UPI QR code and bank details are now live on all invoices.
+          Settings updated successfully! Dynamic UPI QR code aur bank details invoices par live ho chuki hain.
         </div>
       )}
 
@@ -131,25 +255,37 @@ export default function SettingsClient({ company }: { company: Company }) {
                     Dynamic UPI QR Code (Instant Client Payments)
                   </h2>
                   <p className="text-xs text-slate-500">
-                    This UPI ID will generate a scannable QR code on all invoices for Google Pay, PhonePe, and Paytm.
+                    Yeh UPI ID sabhi sales invoices par scannable QR code banayegi (Google Pay, PhonePe, Paytm).
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                  UPI ID / VPA *
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    UPI ID / VPA *
+                  </label>
+                  {form.upiId && (
+                    <span className={`text-[11px] font-medium ${isUpiValid ? "text-emerald-600" : "text-red-500"}`}>
+                      {isUpiValid ? "✓ Valid UPI handle" : "✕ Format: user@bank"}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 9876543210@paytm or businessname@okhdfcbank"
                   value={form.upiId}
                   onChange={(e) => update("upiId", e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  onBlur={() => handleBlur("upiId")}
+                  className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${
+                    form.upiId && !isUpiValid
+                      ? "border-red-300 focus:border-red-500 focus:ring-red-500/10"
+                      : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/10"
+                  }`}
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Enter your registered Google Pay, PhonePe, Paytm, or Bank UPI handle.
+                  Registered Google Pay, PhonePe, Paytm ya Bank UPI ID enter karein.
                 </p>
               </div>
             </div>
@@ -160,7 +296,7 @@ export default function SettingsClient({ company }: { company: Company }) {
                 Live QR Preview
               </p>
               <UpiQrCode
-                upiId={form.upiId}
+                upiId={isUpiValid ? form.upiId : "demo@upi"}
                 payeeName={form.name || "Business"}
                 amount={999}
                 invoiceNo="INV-SAMPLE"
@@ -190,22 +326,39 @@ export default function SettingsClient({ company }: { company: Company }) {
             </div>
 
             <div>
-              <label className="label">Account Number</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">Account Number (9-18 Digits)</label>
+                {form.accountNo && (
+                  <span className={`text-[11px] font-medium ${isAccountNoValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isAccountNoValid ? "✓ Valid" : "✕ 9-18 digits daalein"}
+                  </span>
+                )}
+              </div>
               <input
-                className="input font-mono"
+                className={`input font-mono ${form.accountNo && !isAccountNoValid ? "border-red-300 bg-red-50/20" : ""}`}
                 placeholder="e.g. 50200012345678"
                 value={form.accountNo}
-                onChange={(e) => update("accountNo", e.target.value)}
+                onChange={(e) => update("accountNo", e.target.value.replace(/[^0-9]/g, ""))}
+                onBlur={() => handleBlur("accountNo")}
               />
             </div>
 
             <div>
-              <label className="label">IFSC Code</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">IFSC Code (11 Characters)</label>
+                {form.ifscCode && (
+                  <span className={`text-[11px] font-medium ${isIfscValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isIfscValid ? "✓ Valid IFSC" : "✕ Format: SBIN0001234"}
+                  </span>
+                )}
+              </div>
               <input
-                className="input font-mono uppercase"
+                maxLength={11}
+                className={`input font-mono uppercase ${form.ifscCode && !isIfscValid ? "border-red-300 bg-red-50/20" : ""}`}
                 placeholder="e.g. HDFC0001234"
                 value={form.ifscCode}
-                onChange={(e) => update("ifscCode", e.target.value)}
+                onChange={(e) => update("ifscCode", e.target.value.toUpperCase())}
+                onBlur={() => handleBlur("ifscCode")}
               />
             </div>
 
@@ -238,6 +391,7 @@ export default function SettingsClient({ company }: { company: Company }) {
                 required
                 value={form.name}
                 onChange={(e) => update("name", e.target.value)}
+                onBlur={() => handleBlur("name")}
               />
             </div>
 
@@ -252,44 +406,90 @@ export default function SettingsClient({ company }: { company: Company }) {
             </div>
 
             <div>
-              <label className="label">GSTIN (15-digit)</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">GSTIN (15 Characters)</label>
+                {form.gstin && (
+                  <span className={`text-[11px] font-medium ${isGstinValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isGstinValid ? "✓ Valid GSTIN" : "✕ Format: 24ABCDE1234F1Z5"}
+                  </span>
+                )}
+              </div>
               <input
-                className="input font-mono uppercase"
+                maxLength={15}
+                className={`input font-mono uppercase ${form.gstin && !isGstinValid ? "border-red-300 bg-red-50/20" : ""}`}
                 placeholder="24ABCDE1234F1Z5"
                 value={form.gstin}
-                onChange={(e) => update("gstin", e.target.value)}
+                onChange={(e) => update("gstin", e.target.value.toUpperCase())}
+                onBlur={() => handleBlur("gstin")}
               />
             </div>
 
             <div>
-              <label className="label">PAN Number</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">PAN Number (10 Characters)</label>
+                {form.pan && (
+                  <span className={`text-[11px] font-medium ${isPanValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isPanValid ? "✓ Valid PAN" : "✕ Format: ABCDE1234F"}
+                  </span>
+                )}
+              </div>
               <input
-                className="input font-mono uppercase"
+                maxLength={10}
+                className={`input font-mono uppercase ${form.pan && !isPanValid ? "border-red-300 bg-red-50/20" : ""}`}
                 placeholder="ABCDE1234F"
                 value={form.pan}
-                onChange={(e) => update("pan", e.target.value)}
+                onChange={(e) => update("pan", e.target.value.toUpperCase())}
+                onBlur={() => handleBlur("pan")}
               />
             </div>
 
             <div>
-              <label className="label">Phone / Mobile</label>
-              <input
-                className="input"
-                placeholder="9876543210"
-                value={form.phone}
-                onChange={(e) => update("phone", e.target.value)}
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">Phone / Mobile (10 Digits)</label>
+                {form.phone && (
+                  <span className={`text-[11px] font-medium ${isPhoneValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isPhoneValid ? "✓ Valid phone" : "✕ 10 digits daalein"}
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Phone className="h-4 w-4" />
+                </div>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  className={`input pl-10 ${form.phone && !isPhoneValid ? "border-red-300 bg-red-50/20" : ""}`}
+                  placeholder="9876543210"
+                  value={form.phone}
+                  onChange={(e) => update("phone", e.target.value.replace(/[^0-9]/g, ""))}
+                  onBlur={() => handleBlur("phone")}
+                />
+              </div>
             </div>
 
             <div>
-              <label className="label">Email Address</label>
-              <input
-                type="email"
-                className="input"
-                placeholder="billing@mybusiness.in"
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label mb-0">Email Address</label>
+                {form.email && (
+                  <span className={`text-[11px] font-medium ${isEmailValid ? "text-emerald-600" : "text-red-500"}`}>
+                    {isEmailValid ? "✓ Valid email" : "✕ Invalid format"}
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <input
+                  type="email"
+                  className={`input pl-10 ${form.email && !isEmailValid ? "border-red-300 bg-red-50/20" : ""}`}
+                  placeholder="billing@mybusiness.in"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  onBlur={() => handleBlur("email")}
+                />
+              </div>
             </div>
 
             <div className="sm:col-span-2">
@@ -347,7 +547,7 @@ export default function SettingsClient({ company }: { company: Company }) {
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isFormValid}
             className="flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-brand-700 disabled:opacity-50 transition-all"
           >
             <Save className="h-4 w-4" />

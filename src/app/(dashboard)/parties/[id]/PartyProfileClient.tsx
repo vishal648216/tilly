@@ -85,8 +85,17 @@ export default function PartyProfileClient({
     e.preventDefault();
     if (!selectedInvoice) return;
     const amt = parseFloat(paymentAmount);
-    if (!amt || amt <= 0) {
-      setMsg("Please enter a valid payment amount");
+    const grand = parseFloat(selectedInvoice.grandTotal.toString());
+    const paid = parseFloat(selectedInvoice.paidAmount.toString());
+    const remaining = Math.max(0, grand - paid);
+
+    if (isNaN(amt) || amt <= 0) {
+      setMsg("Kripya valid payment amount (₹ 0 se zyada) enter karein.");
+      return;
+    }
+
+    if (amt > remaining) {
+      setMsg(`Payment amount remaining balance (${formatCurrency(remaining)}) se zyada nahi ho sakta.`);
       return;
     }
 
@@ -100,7 +109,7 @@ export default function PartyProfileClient({
           invoiceId: selectedInvoice.id,
           amount: amt,
           paymentMode,
-          notes,
+          notes: notes.trim() || undefined,
         }),
       });
       const data = await res.json();
