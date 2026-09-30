@@ -172,7 +172,80 @@ export async function createInvoice(input: CreateInvoiceInput) {
       },
     });
 
-    // Create invoice linked to voucher
+    // Resolve or auto-create items for inventory & stock tracking
+    for (const line of builtLines) {
+      const cleanName = line.name.trim();
+      let matchedItem = null;
+
+      // 1. Try finding by line.itemId
+      if (line.itemId) {
+        matchedItem = await tx.item.findUnique({
+          where: { id: line.itemId },
+        });
+      }
+
+      // 2. If not matched, try finding by name in this company (case-insensitive)
+      if (!matchedItem && cleanName) {
+        const companyItems = await tx.item.findMany({
+          where: { companyId },
+        });
+        matchedItem =
+          companyItems.find(
+            (i) => i.name.trim().toLowerCase() === cleanName.toLowerCase()
+          ) || null;
+      }
+
+      if (!isSales) {
+        // PURCHASE BILL (Vendor Purchase)
+        if (matchedItem) {
+          // Existing item purchased: Increment stock & update latest purchase rate
+          const updateData: any = {
+            stock: { increment: line.qty.toNumber() },
+            purchasePrice: line.rate,
+          };
+          if (line.hsn && !matchedItem.hsn) {
+            updateData.hsn = line.hsn.trim();
+          }
+          await tx.item.update({
+            where: { id: matchedItem.id },
+            data: updateData,
+          });
+          line.itemId = matchedItem.id;
+        } else if (cleanName) {
+          // BRAND NEW ITEM purchased from vendor -> Auto-create into Item list!
+          const newItem = await tx.item.create({
+            data: {
+              companyId,
+              name: cleanName,
+              hsn: line.hsn ? line.hsn.trim() : null,
+              gstRate: line.gstRate,
+              purchasePrice: line.rate,
+              salePrice: new Decimal(
+                roundTo2(line.rate.toNumber() > 0 ? line.rate.toNumber() * 1.2 : 0)
+              ),
+              stock: line.qty,
+              unit: "PCS",
+              type: "PRODUCT",
+            },
+          });
+          line.itemId = newItem.id;
+        }
+      } else {
+        // SALES INVOICE
+        if (matchedItem) {
+          // Decrement stock
+          await tx.item.update({
+            where: { id: matchedItem.id },
+            data: {
+              stock: { decrement: line.qty.toNumber() },
+            },
+          });
+          line.itemId = matchedItem.id;
+        }
+      }
+    }
+
+    // Create invoice linked to voucher with populated itemIds
     const invoice = await tx.invoice.create({
       data: {
         companyId,
@@ -195,20 +268,6 @@ export async function createInvoice(input: CreateInvoiceInput) {
       },
       include: { lines: true, party: true },
     });
-
-    // Update stock for items (reduce on SALE, increase on PURCHASE)
-    for (const line of builtLines) {
-      if (line.itemId) {
-        await tx.item.update({
-          where: { id: line.itemId },
-          data: {
-            stock: {
-              increment: isSales ? -line.qty.toNumber() : line.qty.toNumber(),
-            },
-          },
-        });
-      }
-    }
 
     return invoice;
   });

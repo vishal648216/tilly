@@ -143,6 +143,15 @@ export default function NewInvoiceForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
+      {isPurchase && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-xs text-emerald-800">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>
+            <strong>Inventory Auto-Sync Active:</strong> Purchase bill save hote hi purchased saman aapki <strong>Item List</strong> me add ho jayega aur stock automatically badh jayega.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
         <div>
@@ -194,7 +203,7 @@ export default function NewInvoiceForm({
                         value={line.itemId}
                         onChange={(e) => selectItem(line.key, e.target.value)}
                       >
-                        <option value="">Custom item</option>
+                        <option value="">Custom / New Item</option>
                         {items.map((i) => (
                           <option key={i.id} value={i.id}>
                             {i.name}
@@ -208,6 +217,11 @@ export default function NewInvoiceForm({
                       value={line.name}
                       onChange={(e) => updateLine(line.key, "name", e.target.value)}
                     />
+                    {isPurchase && !line.itemId && line.name.trim() && (
+                      <span className="inline-block mt-1 text-[11px] text-emerald-600 font-medium">
+                        ✨ Will auto-add to Item list
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <input
