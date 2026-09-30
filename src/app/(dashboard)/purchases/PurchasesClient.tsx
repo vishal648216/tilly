@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
+  PackageMinus,
+  RotateCcw,
 } from "lucide-react";
 
 interface Invoice {
@@ -86,10 +88,17 @@ export default function PurchasesClient({
             Manage vendor bills, input GST credits, and inventory replenishment
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/purchase-return"
+            className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-100 transition-colors"
+          >
+            <PackageMinus className="h-4 w-4 text-rose-600" />
+            <span>Vendor Returns (Debit Notes)</span>
+          </Link>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
           >
             <Download className="h-4 w-4 text-slate-500" /> Export CSV
           </button>
@@ -236,12 +245,21 @@ export default function PurchasesClient({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/invoices/${pur.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                        >
-                          <Eye className="h-3.5 w-3.5" /> View Bill
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/purchase-return/new?billId=${pur.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                            title="Return goods from this bill to vendor"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Return
+                          </Link>
+                          <Link
+                            href={`/invoices/${pur.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> View Bill
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

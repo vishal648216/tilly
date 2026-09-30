@@ -25,12 +25,14 @@ import {
   ChevronRight,
   RotateCcw,
   PackageMinus,
+  Plus,
 } from "lucide-react";
 
 interface NavGroup {
   title: string;
   items: {
     href: string;
+    newHref?: string;
     label: string;
     icon: any;
     badge?: string;
@@ -47,18 +49,18 @@ const navGroups: NavGroup[] = [
   {
     title: "Transactions",
     items: [
-      { href: "/invoices", label: "Invoices (Sales)", icon: Receipt },
-      { href: "/sales-return", label: "Sales Return (CN)", icon: RotateCcw },
-      { href: "/purchases", label: "Purchases", icon: ShoppingCart },
-      { href: "/purchase-return", label: "Purchase Return (DN)", icon: PackageMinus },
+      { href: "/invoices", newHref: "/invoices/new", label: "Invoices (Sales)", icon: Receipt },
+      { href: "/sales-return", newHref: "/sales-return/new", label: "Sales Return (CN)", icon: RotateCcw },
+      { href: "/purchases", newHref: "/invoices/new?type=PURCHASE", label: "Purchases (Bills)", icon: ShoppingCart },
+      { href: "/purchase-return", newHref: "/purchase-return/new", label: "Vendor Return (Debit Note)", icon: PackageMinus, badge: "NEW" },
       { href: "/expenses", label: "Expenses", icon: Wallet },
     ],
   },
   {
     title: "Management",
     items: [
-      { href: "/parties", label: "Parties (CRM)", icon: Users },
-      { href: "/items", label: "Items & Inventory", icon: Package },
+      { href: "/parties", newHref: "/parties/new", label: "Parties (CRM)", icon: Users },
+      { href: "/items", newHref: "/items/new", label: "Items & Inventory", icon: Package },
       { href: "/day-book", label: "Day Book", icon: CalendarDays },
     ],
   },
@@ -67,7 +69,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/ledger", label: "Party Ledger", icon: BookOpen },
       { href: "/ledger/account", label: "Account Ledger", icon: FolderArchive },
-      { href: "/vouchers", label: "Vouchers & Journal", icon: FileSpreadsheet },
+      { href: "/vouchers", newHref: "/vouchers/new", label: "Vouchers & Journal", icon: FileSpreadsheet },
     ],
   },
   {
@@ -149,28 +151,48 @@ export default function Sidebar({ companyName }: { companyName: string }) {
                       ? pathname === "/ledger"
                       : pathname === item.href || pathname.startsWith(item.href + "/");
                   return (
-                    <Link
+                    <div
                       key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className={`group flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                      className={`group flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
                         active
                           ? "bg-emerald-50 text-emerald-800 font-bold shadow-2xs"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <Link
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-2.5 min-w-0 flex-1 py-1"
+                      >
                         <Icon
                           className={`h-4 w-4 shrink-0 transition-colors ${
                             active ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600"
                           }`}
                         />
                         <span className="truncate">{item.label}</span>
+                      </Link>
+
+                      <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                        {item.badge && (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 uppercase tracking-wider">
+                            {item.badge}
+                          </span>
+                        )}
+                        {item.newHref && (
+                          <Link
+                            href={item.newHref}
+                            onClick={() => setOpen(false)}
+                            title={`Create new ${item.label}`}
+                            className="p-1 rounded-md text-slate-400 hover:bg-slate-200/80 hover:text-slate-800 transition-colors"
+                          >
+                            <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </Link>
+                        )}
+                        {active && !item.newHref && !item.badge && (
+                          <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                        )}
                       </div>
-                      {active && (
-                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
-                      )}
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
