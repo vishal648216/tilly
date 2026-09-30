@@ -79,12 +79,15 @@ export default function SignupPage() {
 
   const isGstinValid = useMemo(() => {
     if (!form.gstin) return true; // optional
-    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(form.gstin.trim().toUpperCase());
+    const clean = form.gstin.trim().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    return clean.length === 15 && /^[0-9]{2}[A-Z0-9]{13}$/.test(clean);
   }, [form.gstin]);
 
   const isPhoneValid = useMemo(() => {
     if (!form.phone) return true; // optional
-    const digits = form.phone.replace(/[^0-9]/g, "");
+    let digits = form.phone.replace(/[^0-9]/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+    else if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
     return digits.length === 10;
   }, [form.phone]);
 
@@ -113,23 +116,27 @@ export default function SignupPage() {
     });
 
     if (!isEmailValid) {
-      setError("Kripya valid email address daalein (jaise: name@example.com)");
+      setError("Please enter a valid email address (e.g. name@example.com).");
       return;
     }
     if (!isPasswordValid) {
-      setError("Password me kam se kam 8 characters, ek letter aur ek number hona zaroori hai.");
+      setError("Password must contain at least 8 characters, including a letter and a number.");
       return;
     }
     if (!isConfirmPasswordValid) {
-      setError("Dono password match nahi ho rahe hain.");
+      setError("Passwords do not match. Please re-enter your password.");
       return;
     }
     if (!form.companyName.trim()) {
-      setError("Company / Dukan ka naam enter karein.");
+      setError("Please enter your Company / Business name.");
       return;
     }
     if (form.gstin && !isGstinValid) {
-      setError("GSTIN ka format galat hai (15 characters: 27ABCDE1234F1Z5).");
+      setError("Invalid GSTIN format (must be 15 alphanumeric characters, e.g. 27ABCDE1234F1Z5).");
+      return;
+    }
+    if (form.phone && !isPhoneValid) {
+      setError("Please enter a valid 10-digit mobile number.");
       return;
     }
 

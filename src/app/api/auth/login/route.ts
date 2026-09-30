@@ -117,7 +117,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Aapka account verification pending hai. Super Admin ke approve karne ke baad aap login kar sakenge.",
+              "Your account registration is pending Super Admin approval. You will be able to log in once approved.",
           },
           { status: 403 }
         );
@@ -126,7 +126,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Aapka account registration Super Admin dwara reject kar diya gaya hai. Kripya admin se sampark karein.",
+              "Your account registration was rejected by the Super Admin. Please contact the administrator for assistance.",
           },
           { status: 403 }
         );
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Aapka account suspend kar diya gaya hai. Kripya Super Admin se sampark karein.",
+              "Your account has been suspended. Please contact the Super Admin for assistance.",
           },
           { status: 403 }
         );

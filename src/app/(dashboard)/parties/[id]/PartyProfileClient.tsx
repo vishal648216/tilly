@@ -90,12 +90,12 @@ export default function PartyProfileClient({
     const remaining = Math.max(0, grand - paid);
 
     if (isNaN(amt) || amt <= 0) {
-      setMsg("Kripya valid payment amount (₹ 0 se zyada) enter karein.");
+      setMsg("Please enter a valid payment amount greater than 0.");
       return;
     }
 
     if (amt > remaining) {
-      setMsg(`Payment amount remaining balance (${formatCurrency(remaining)}) se zyada nahi ho sakta.`);
+      setMsg(`Payment amount cannot exceed the remaining balance (${formatCurrency(remaining)}).`);
       return;
     }
 

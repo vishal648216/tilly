@@ -104,7 +104,7 @@ export default function NewInvoiceForm({
     setError("");
     const validLines = lines.filter((l) => l.name && l.qty > 0 && l.rate >= 0);
     if (validLines.length === 0) {
-      setError("Kam se kam ek item add karein.");
+      setError("Please add at least one item with valid quantity and rate.");
       return;
     }
     setLoading(true);
@@ -147,7 +147,7 @@ export default function NewInvoiceForm({
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-xs text-emerald-800">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span>
-            <strong>Inventory Auto-Sync Active:</strong> Purchase bill save hote hi purchased saman aapki <strong>Item List</strong> me add ho jayega aur stock automatically badh jayega.
+            <strong>Inventory Auto-Sync Active:</strong> When you save this purchase bill, items will be automatically updated or added to your <strong>Items & Inventory</strong> list.
           </span>
         </div>
       )}

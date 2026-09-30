@@ -35,12 +35,12 @@ export default function OnboardingPage() {
     setTouched({ companyName: true, gstin: true });
 
     if (form.companyName.trim().length < 2) {
-      setError("Company / Dukan ka naam kam se kam 2 characters ka hona chahiye.");
+      setError("Business / Company name must be at least 2 characters long.");
       return;
     }
 
     if (form.gstin.trim() && !isGstinValid) {
-      setError("GSTIN ka format galat hai (15 characters: 27ABCDE1234F1Z5).");
+      setError("Invalid GSTIN format (must be 15 alphanumeric characters, e.g. 27ABCDE1234F1Z5).");
       return;
     }
 

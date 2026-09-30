@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      return NextResponse.json({ error: "Kripya valid expense amount (₹ 0 se zyada) enter karein." }, { status: 400 });
+      return NextResponse.json({ error: "Please enter a valid expense amount greater than 0." }, { status: 400 });
     }
 
     const date = expenseDate ? new Date(expenseDate) : new Date();

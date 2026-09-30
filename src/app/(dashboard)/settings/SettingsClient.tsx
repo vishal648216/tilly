@@ -145,42 +145,42 @@ export default function SettingsClient({ company }: { company: Company }) {
     });
 
     if (!form.name.trim()) {
-      setError("Company Trade Name zaroori hai.");
+      setError("Company Trade Name is required.");
       setLoading(false);
       return;
     }
     if (!isUpiValid) {
-      setError("Valid UPI VPA enter karein (jaise: 9876543210@paytm ya business@okhdfcbank).");
+      setError("Please enter a valid UPI ID (e.g. 9876543210@paytm or business@okhdfcbank).");
       setLoading(false);
       return;
     }
     if (form.phone.trim() && !isPhoneValid) {
-      setError("Mobile number 10 digits ka hona chahiye.");
+      setError("Please enter a valid 10-digit mobile number.");
       setLoading(false);
       return;
     }
     if (form.email.trim() && !isEmailValid) {
-      setError("Valid email format daalein (jaise: billing@mybusiness.in).");
+      setError("Please enter a valid email address (e.g. billing@mybusiness.in).");
       setLoading(false);
       return;
     }
     if (form.gstin.trim() && !isGstinValid) {
-      setError("GSTIN format galat hai (15 characters: 24ABCDE1234F1Z5).");
+      setError("Invalid GSTIN format (must be 15 alphanumeric characters, e.g. 24ABCDE1234F1Z5).");
       setLoading(false);
       return;
     }
     if (form.pan.trim() && !isPanValid) {
-      setError("PAN format galat hai (10 characters: ABCDE1234F).");
+      setError("Invalid PAN format (must be 10 characters: ABCDE1234F).");
       setLoading(false);
       return;
     }
     if (form.ifscCode.trim() && !isIfscValid) {
-      setError("Bank IFSC code galat hai (11 characters: SBIN0001234 / HDFC0001234).");
+      setError("Invalid Bank IFSC code (11 characters: e.g. SBIN0001234).");
       setLoading(false);
       return;
     }
     if (form.accountNo.trim() && !isAccountNoValid) {
-      setError("Bank Account Number 9 se 18 digits ka hona chahiye.");
+      setError("Bank Account Number must be between 9 and 18 digits.");
       setLoading(false);
       return;
     }

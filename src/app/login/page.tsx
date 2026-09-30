@@ -30,17 +30,17 @@ export default function LoginPage() {
     setTouched({ email: true, password: true });
 
     if (!email.trim()) {
-      setError("Kripya email address enter karein.");
+      setError("Please enter your email address.");
       return;
     }
 
     if (!isEmailValid) {
-      setError("Kripya valid email address enter karein (jaise: demo@taily.in).");
+      setError("Please enter a valid email address (e.g. demo@taily.in).");
       return;
     }
 
     if (!password) {
-      setError("Kripya password enter karein.");
+      setError("Please enter your password.");
       return;
     }
 

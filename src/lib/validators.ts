@@ -16,24 +16,32 @@ export function isValidEmail(email: string | null | undefined): boolean {
 
 export function isValidPhone(phone: string | null | undefined): boolean {
   if (!phone || !phone.trim()) return false;
-  const digits = phone.replace(/[^0-9]/g, "");
-  return PHONE_REGEX.test(digits);
+  let digits = phone.replace(/[^0-9]/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) {
+    digits = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  return digits.length === 10;
 }
 
 export function isValidGstin(gstin: string | null | undefined): boolean {
   if (!gstin || !gstin.trim()) return false;
-  return GSTIN_REGEX.test(gstin.trim().toUpperCase());
+  const clean = gstin.trim().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  if (clean.length !== 15) return false;
+  return /^[0-9]{2}[A-Z0-9]{13}$/.test(clean);
 }
 
 export function isValidPan(pan: string | null | undefined): boolean {
   if (!pan || !pan.trim()) return false;
-  return PAN_REGEX.test(pan.trim().toUpperCase());
+  const clean = pan.trim().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  return clean.length === 10 && /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(clean);
 }
 
 export function isValidPincode(pincode: string | null | undefined): boolean {
   if (!pincode || !pincode.trim()) return false;
   const digits = pincode.replace(/[^0-9]/g, "");
-  return PINCODE_REGEX.test(digits);
+  return digits.length === 6;
 }
 
 export function isValidIfsc(ifsc: string | null | undefined): boolean {

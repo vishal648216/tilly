@@ -208,13 +208,13 @@ export default function NewSalesReturnForm({
     setError("");
 
     if (!partyId) {
-      setError("Kripya Customer select karein.");
+      setError("Please select a customer.");
       return;
     }
 
     const validLines = lines.filter((l) => l.name.trim() && l.qty > 0 && l.rate >= 0);
     if (validLines.length === 0) {
-      setError("Kam se kam ek valid return item aur quantity add karein.");
+      setError("Please add at least one valid return item with quantity.");
       return;
     }
 

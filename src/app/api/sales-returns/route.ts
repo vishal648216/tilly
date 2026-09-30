@@ -48,11 +48,11 @@ export async function POST(req: Request) {
     } = body;
 
     if (!partyId) {
-      return NextResponse.json({ error: "Kripya Customer / Party select karein." }, { status: 400 });
+      return NextResponse.json({ error: "Please select a customer / party." }, { status: 400 });
     }
 
     if (!lines || !Array.isArray(lines) || lines.length === 0) {
-      return NextResponse.json({ error: "Kam se kam ek return item add karein." }, { status: 400 });
+      return NextResponse.json({ error: "At least one return item is required." }, { status: 400 });
     }
 
     const returnDate = date ? new Date(date) : new Date();
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       where: { id: partyId, companyId: company.id },
     });
     if (!party) {
-      return NextResponse.json({ error: "Selected party nahi mili." }, { status: 400 });
+      return NextResponse.json({ error: "Selected party not found." }, { status: 400 });
     }
 
     // 1. Calculate Subtotal, GST, RoundOff, Grand Total

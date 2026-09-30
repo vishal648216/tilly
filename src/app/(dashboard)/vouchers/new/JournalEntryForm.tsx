@@ -38,7 +38,7 @@ export default function JournalEntryForm({ accounts }: { accounts: Account[] }) 
     e.preventDefault();
     setError("");
     if (entries.some((e) => !e.accountId)) {
-      setError("Har entry me account select karein.");
+      setError("Please select an account for each line entry.");
       return;
     }
     setLoading(true);

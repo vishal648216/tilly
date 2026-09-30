@@ -77,23 +77,23 @@ export default function NewItemForm() {
     });
 
     if (form.name.trim().length < 2) {
-      setError("Item / Service ka naam kam se kam 2 characters ka hona chahiye.");
+      setError("Item / Service name must be at least 2 characters long.");
       return;
     }
 
     if (form.hsn.trim() && !isHsnValid) {
-      setError("HSN / SAC Code 2 se 8 digits ka number hona chahiye (jaise: 4820 ya 998714).");
+      setError("HSN / SAC Code must be between 2 and 8 digits (e.g. 4820 or 998714).");
       return;
     }
 
     const saleP = form.salePrice ? parseFloat(form.salePrice) : 0;
     const purP = form.purchasePrice ? parseFloat(form.purchasePrice) : 0;
     if (isNaN(saleP) || saleP < 0) {
-      setError("Sale price 0 ya us se zyada honi chahiye.");
+      setError("Sale price must be 0 or greater.");
       return;
     }
     if (isNaN(purP) || purP < 0) {
-      setError("Purchase price 0 ya us se zyada honi chahiye.");
+      setError("Purchase price must be 0 or greater.");
       return;
     }
 

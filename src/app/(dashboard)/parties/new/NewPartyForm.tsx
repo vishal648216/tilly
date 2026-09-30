@@ -88,23 +88,23 @@ export default function NewPartyForm() {
     });
 
     if (form.name.trim().length < 2) {
-      setError("Party ka naam kam se kam 2 characters ka hona chahiye.");
+      setError("Party name must be at least 2 characters long.");
       return;
     }
     if (form.phone.trim() && !isPhoneValid) {
-      setError("Kripya valid 10-digit Indian mobile number enter karein (6, 7, 8, 9 se start hona chahiye).");
+      setError("Please enter a valid 10-digit mobile number.");
       return;
     }
     if (form.email.trim() && !isEmailValid) {
-      setError("Kripya valid email address daalein (jaise: party@business.com).");
+      setError("Please enter a valid email address (e.g. party@business.com).");
       return;
     }
     if (form.gstin.trim() && !isGstinValid) {
-      setError("GSTIN format galat hai (15 characters: 27ABCDE1234F1Z5).");
+      setError("Invalid GSTIN format (must be 15 alphanumeric characters, e.g. 27ABCDE1234F1Z5).");
       return;
     }
     if (form.pincode.trim() && !isPincodeValid) {
-      setError("Pincode 6 digits ka hona chahiye (jaise: 400001).");
+      setError("PIN code must be exactly 6 digits (e.g. 400001).");
       return;
     }
 

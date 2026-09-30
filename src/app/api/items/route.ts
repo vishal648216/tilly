@@ -34,20 +34,20 @@ export async function POST(req: Request) {
 
     const cleanName = name?.trim();
     if (!cleanName || cleanName.length < 2) {
-      return NextResponse.json({ error: "Item name kam se kam 2 characters ka hona chahiye." }, { status: 400 });
+      return NextResponse.json({ error: "Item name must be at least 2 characters long." }, { status: 400 });
     }
 
     if (hsn) {
       const cleanHsn = hsn.replace(/[^0-9]/g, "");
       if (cleanHsn.length < 2 || cleanHsn.length > 8) {
-        return NextResponse.json({ error: "HSN/SAC code 2 se 8 digits ka hona chahiye." }, { status: 400 });
+        return NextResponse.json({ error: "HSN/SAC code must be between 2 and 8 digits." }, { status: 400 });
       }
     }
 
     const saleP = parseFloat(salePrice) || 0;
     const purP = parseFloat(purchasePrice) || 0;
     if (saleP < 0 || purP < 0) {
-      return NextResponse.json({ error: "Price negative nahi ho sakti." }, { status: 400 });
+      return NextResponse.json({ error: "Price cannot be negative." }, { status: 400 });
     }
 
     const item = await prisma.item.create({
