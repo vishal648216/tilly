@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   ChevronRight,
   RotateCcw,
+  PackageMinus,
 } from "lucide-react";
 
 interface NavGroup {
@@ -49,6 +50,7 @@ const navGroups: NavGroup[] = [
       { href: "/invoices", label: "Invoices (Sales)", icon: Receipt },
       { href: "/sales-return", label: "Sales Return (CN)", icon: RotateCcw },
       { href: "/purchases", label: "Purchases", icon: ShoppingCart },
+      { href: "/purchase-return", label: "Purchase Return (DN)", icon: PackageMinus },
       { href: "/expenses", label: "Expenses", icon: Wallet },
     ],
   },
