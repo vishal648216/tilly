@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/currency";
 import SearchBar from "@/components/SearchBar";
 import InvoicesExportButton from "./InvoicesExportButton";
-import { Plus, Receipt, ShoppingCart, ArrowRight } from "lucide-react";
+import { Plus, Receipt, ShoppingCart, ArrowRight, UserPlus } from "lucide-react";
 
 export default async function InvoicesPage({
   searchParams,
@@ -59,6 +59,13 @@ export default async function InvoicesPage({
               }))}
             />
           )}
+          <Link
+            href="/parties/new?type=CUSTOMER&redirect=/invoices/new"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:text-emerald-700 transition-colors"
+          >
+            <UserPlus className="h-4 w-4 text-emerald-600" />
+            <span>+ Add Customer</span>
+          </Link>
           <Link href="/invoices/new" className="btn-primary flex items-center gap-1.5 text-xs sm:text-sm">
             <Plus className="h-4 w-4" /> Sales Invoice
           </Link>

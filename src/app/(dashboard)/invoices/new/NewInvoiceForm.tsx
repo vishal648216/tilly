@@ -3,9 +3,9 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { roundTo2 } from "@/lib/currency";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, UserPlus, X, AlertCircle, CheckCircle2 } from "lucide-react";
 
-type Party = { id: string; name: string; state: string | null; gstin: string | null };
+type Party = { id: string; name: string; state: string | null; gstin: string | null; phone?: string | null };
 type Item = {
   id: string;
   name: string;
@@ -41,6 +41,7 @@ export default function NewInvoiceForm({
 }) {
   const router = useRouter();
   const isPurchase = invoiceType === "PURCHASE";
+  const [partiesList, setPartiesList] = useState<Party[]>(parties);
   const [partyId, setPartyId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<Line[]>([{ ...emptyLine, key: Date.now() }]);
@@ -48,7 +49,82 @@ export default function NewInvoiceForm({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedParty = parties.find((p) => p.id === partyId);
+  // Quick Add Party Modal state
+  const [showAddPartyModal, setShowAddPartyModal] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [partySuccessMsg, setPartySuccessMsg] = useState("");
+  const [newPartyData, setNewPartyData] = useState({
+    name: "",
+    phone: "",
+    gstin: "",
+    state: companyState || "",
+    address: "",
+  });
+
+  async function handleQuickCreateParty(e: React.FormEvent) {
+    e.preventDefault();
+    setModalError("");
+    const cleanName = newPartyData.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      setModalError("Party name must be at least 2 characters long.");
+      return;
+    }
+    const cleanPhone = newPartyData.phone.replace(/\D/g, "");
+    if (newPartyData.phone && cleanPhone.length !== 10) {
+      setModalError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (newPartyData.gstin && newPartyData.gstin.trim().length !== 15) {
+      setModalError("GSTIN must be 15 alphanumeric characters (e.g. 27ABCDE1234F1Z5).");
+      return;
+    }
+
+    setModalLoading(true);
+    try {
+      const res = await fetch("/api/parties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cleanName,
+          type: isPurchase ? "VENDOR" : "CUSTOMER",
+          phone: cleanPhone || null,
+          gstin: newPartyData.gstin ? newPartyData.gstin.trim().toUpperCase() : null,
+          state: newPartyData.state ? newPartyData.state.trim() : null,
+          address: newPartyData.address ? newPartyData.address.trim() : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create party");
+
+      const created: Party = {
+        id: data.party.id,
+        name: data.party.name,
+        state: data.party.state,
+        gstin: data.party.gstin,
+        phone: data.party.phone,
+      };
+
+      setPartiesList((prev) => [created, ...prev]);
+      setPartyId(created.id);
+      setShowAddPartyModal(false);
+      setNewPartyData({
+        name: "",
+        phone: "",
+        gstin: "",
+        state: companyState || "",
+        address: "",
+      });
+      setPartySuccessMsg(`${isPurchase ? "Vendor" : "Customer"} "${created.name}" created and selected!`);
+      setTimeout(() => setPartySuccessMsg(""), 5000);
+    } catch (err: any) {
+      setModalError(err.message || "Failed to save party");
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  const selectedParty = partiesList.find((p) => p.id === partyId);
   // Inter-state if company & party are in different states (and both have GST)
   const isInterState = useMemo(() => {
     if (!companyState || !selectedParty?.state) return false;
@@ -152,15 +228,37 @@ export default function NewInvoiceForm({
         </div>
       )}
 
+      {partySuccessMsg && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-xs text-emerald-800">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span>{partySuccessMsg}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
         <div>
-          <label className="label">{isPurchase ? "Vendor / Supplier" : "Customer / Party"}</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              {isPurchase ? "Vendor / Supplier" : "Customer / Party"}
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setModalError("");
+                setShowAddPartyModal(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>+ New {isPurchase ? "Vendor" : "Customer"}</span>
+            </button>
+          </div>
           <select className="input" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
             <option value="">— Select {isPurchase ? "Vendor" : "Customer"} —</option>
-            {parties.map((p) => (
+            {partiesList.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {p.name} {p.gstin ? `(${p.gstin.slice(0, 5)}...)` : ""}
               </option>
             ))}
           </select>
@@ -337,6 +435,118 @@ export default function NewInvoiceForm({
           Cancel
         </button>
       </div>
+
+      {/* Quick Add Customer / Vendor Modal */}
+      {showAddPartyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Add New {isPurchase ? "Vendor" : "Customer"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Quickly register and select for this bill
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddPartyModal(false);
+                  setModalError("");
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="mt-3 rounded-xl bg-red-50 p-2.5 text-xs text-red-700 flex items-center gap-2 border border-red-200">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700">
+                  {isPurchase ? "Vendor / Supplier Name" : "Customer Name"} *
+                </label>
+                <input
+                  type="text"
+                  className="input mt-1 w-full"
+                  placeholder={isPurchase ? "e.g. Acme Supplier Ltd" : "e.g. Ramesh Sharma / Krishna Stores"}
+                  value={newPartyData.name}
+                  onChange={(e) => setNewPartyData((d) => ({ ...d, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Mobile Number (10 Digits)</label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  className="input mt-1 w-full font-mono"
+                  placeholder="e.g. 9876543210"
+                  value={newPartyData.phone}
+                  onChange={(e) => setNewPartyData((d) => ({ ...d, phone: e.target.value.replace(/\D/g, "") }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">GSTIN (Optional, 15 Chars)</label>
+                <input
+                  type="text"
+                  maxLength={15}
+                  className="input mt-1 w-full font-mono uppercase"
+                  placeholder="e.g. 27ABCDE1234F1Z5"
+                  value={newPartyData.gstin}
+                  onChange={(e) => setNewPartyData((d) => ({ ...d, gstin: e.target.value.toUpperCase() }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">State / Region</label>
+                <input
+                  type="text"
+                  className="input mt-1 w-full"
+                  placeholder="e.g. Maharashtra, Gujarat, Delhi"
+                  value={newPartyData.state}
+                  onChange={(e) => setNewPartyData((d) => ({ ...d, state: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddPartyModal(false);
+                  setModalError("");
+                }}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={modalLoading}
+                onClick={handleQuickCreateParty}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-all disabled:opacity-50"
+              >
+                {modalLoading ? "Saving..." : `Save & Select ${isPurchase ? "Vendor" : "Customer"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

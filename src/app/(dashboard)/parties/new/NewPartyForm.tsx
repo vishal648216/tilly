@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   isValidEmail,
   isValidPhone,
@@ -22,9 +22,14 @@ import {
 
 export default function NewPartyForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramType = searchParams.get("type");
+  const initialType = paramType === "VENDOR" ? "VENDOR" : paramType === "BOTH" ? "BOTH" : "CUSTOMER";
+  const redirectUrl = searchParams.get("redirect") || "/parties";
+
   const [form, setForm] = useState({
     name: "",
-    type: "CUSTOMER",
+    type: initialType,
     phone: "",
     email: "",
     gstin: "",
@@ -128,7 +133,7 @@ export default function NewPartyForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create party");
-      router.push("/parties");
+      router.push(redirectUrl);
       router.refresh();
     } catch (err: any) {
       setError(err.message);
