@@ -41,8 +41,8 @@ export default async function ItemsPage({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Items & Stock</h1>
-          <p className="text-sm text-slate-500">Products, services, and inventory levels</p>
+          <h1 className="text-2xl font-bold">Items & Inventory</h1>
+          <p className="text-sm text-slate-500">Products, stock levels, and inventory valuation</p>
         </div>
         <div className="flex gap-2">
           <SearchBar placeholder="Search item, SKU, barcode, HSN..." defaultValue={query} />
