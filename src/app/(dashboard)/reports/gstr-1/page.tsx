@@ -23,12 +23,15 @@ export default async function Gstr1Page({
   const toDate = new Date(to);
   toDate.setDate(toDate.getDate() + 1);
 
-  // Get all SALES invoices in date range
+  // Get all POSTED SALES invoices in date range.
+  // GSTR-1 must ONLY include POSTED, PARTIALLY_PAID, PAID, and OVERDUE invoices.
+  // DRAFT invoices are not filed. CANCELLED/REVERSED invoices are excluded.
   const invoices = await prisma.invoice.findMany({
     where: {
       companyId: company.id,
       type: "SALES",
       date: { gte: fromDate, lt: toDate },
+      status: { notIn: ["DRAFT", "CANCELLED", "REVERSED"] },
     },
     include: { party: true, lines: true },
     orderBy: { date: "asc" },

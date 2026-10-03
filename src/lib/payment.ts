@@ -4,6 +4,7 @@ import { roundTo2 } from "./currency";
 import { DEFAULT_CHART_OF_ACCOUNTS } from "./accounts";
 
 export type ReceivePaymentInput = {
+  companyId?: string;
   invoiceId: string;
   amount: number;
   date: Date;
@@ -33,7 +34,7 @@ async function ensureAccount(companyId: string, preferredCodes: string[]): Promi
 }
 
 export async function receivePayment(input: ReceivePaymentInput) {
-  const { invoiceId, amount, date, mode, reference, narration } = input;
+  const { companyId: expectedCompanyId, invoiceId, amount, date, mode, reference, narration } = input;
 
   if (amount <= 0) throw new Error("Amount must be greater than 0");
 
@@ -43,6 +44,10 @@ export async function receivePayment(input: ReceivePaymentInput) {
     include: { company: true },
   });
   if (!invoice) throw new Error("Invoice not found");
+
+  if (expectedCompanyId && invoice.companyId !== expectedCompanyId) {
+    throw new Error("Cross-tenant access violation: Invoice does not belong to active company.");
+  }
 
   const companyId = invoice.companyId;
 
@@ -133,6 +138,7 @@ export async function receivePayment(input: ReceivePaymentInput) {
 // ============================================================
 
 export type MakePaymentInput = {
+  companyId?: string;
   invoiceId: string;
   amount: number;
   date: Date;
@@ -142,7 +148,7 @@ export type MakePaymentInput = {
 };
 
 export async function makePayment(input: MakePaymentInput) {
-  const { invoiceId, amount, date, mode, reference, narration } = input;
+  const { companyId: expectedCompanyId, invoiceId, amount, date, mode, reference, narration } = input;
 
   if (amount <= 0) throw new Error("Amount must be greater than 0");
 
@@ -151,6 +157,10 @@ export async function makePayment(input: MakePaymentInput) {
     include: { company: true },
   });
   if (!invoice) throw new Error("Invoice not found");
+
+  if (expectedCompanyId && invoice.companyId !== expectedCompanyId) {
+    throw new Error("Cross-tenant access violation: Invoice does not belong to active company.");
+  }
 
   const companyId = invoice.companyId;
 

@@ -5,6 +5,7 @@ import { formatCurrency, formatNumber, numberToWords } from "@/lib/currency";
 import InvoiceActions from "./InvoiceActions";
 import PaymentForm from "./PaymentForm";
 import UpiQrCode from "@/components/UpiQrCode";
+import { getInvoiceCustomization } from "@/lib/invoiceTemplate";
 
 export default async function InvoiceDetailPage({
   params,
@@ -22,12 +23,18 @@ export default async function InvoiceDetailPage({
   });
   if (!invoice) notFound();
 
+  const customization = await getInvoiceCustomization(company.id);
+
   const isInterState = parseFloat(invoice.igstTotal.toString()) > 0;
   const grand = parseFloat(invoice.grandTotal.toString());
   const subTotal = parseFloat(invoice.subTotal.toString());
   const roundOff = parseFloat(invoice.roundOff.toString());
 
-  const effectiveUpiId = company.upiId || "taily@upi";
+  const effectiveUpiId = customization.upiId || company.upiId || "taily@upi";
+  const primaryColor = customization.primaryColor || "#059669";
+  const template = customization.template || "Modern";
+  const displayName = customization.companyDisplayName || company.legalName || company.name;
+  const displayAddress = customization.customAddress || company.address;
 
   return (
     <div>
@@ -61,22 +68,45 @@ export default async function InvoiceDetailPage({
       </div>
 
       {/* ===== Printable Invoice Paper ===== */}
-      <div id="invoice-paper" className="mx-auto max-w-[800px] bg-white p-8 shadow-lg print:max-w-none print:shadow-none print:p-0">
+      <div
+        id="invoice-paper"
+        className="mx-auto max-w-[800px] bg-white p-8 shadow-lg print:max-w-none print:shadow-none print:p-0"
+        style={{ fontFamily: customization.fontFamily || "Inter" }}
+      >
         {/* Header */}
-        <div className="flex items-start justify-between border-b-2 border-brand-600 pb-4">
+        <div
+          className="flex items-start justify-between border-b-2 pb-4"
+          style={{ borderColor: primaryColor }}
+        >
           <div>
             {invoice.type === "SALES" ? (
               <>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Billed By (Seller)</p>
-                <h1 className="text-2xl font-bold text-slate-900">{company.name}</h1>
-                {company.legalName && company.legalName !== company.name && (
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Billed By (Seller)</p>
+                  <span
+                    className="text-[9px] font-bold px-2 py-0.2 rounded text-white uppercase tracking-wider"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {template} Template
+                  </span>
+                </div>
+                {customization.showLogo && customization.logoUrl && (
+                  <img
+                    src={customization.logoUrl}
+                    alt="Company Logo"
+                    className="h-10 object-contain mb-1.5"
+                    style={{ maxWidth: customization.logoWidth || 120 }}
+                  />
+                )}
+                <h1 className="text-2xl font-bold text-slate-900">{displayName}</h1>
+                {company.legalName && company.legalName !== displayName && (
                   <p className="text-sm text-slate-600">{company.legalName}</p>
                 )}
-                {company.address && <p className="mt-1 text-sm text-slate-600">{company.address}</p>}
+                {displayAddress && <p className="mt-1 text-sm text-slate-600">{displayAddress}</p>}
                 <p className="text-sm text-slate-600">
                   {[company.city, company.state, company.pincode].filter(Boolean).join(", ")}
                 </p>
-                {company.gstin && (
+                {customization.showGstin && company.gstin && (
                   <p className="text-sm font-medium text-slate-700">GSTIN: {company.gstin}</p>
                 )}
                 {company.phone && <p className="text-sm text-slate-600">Phone: {company.phone}</p>}
@@ -99,13 +129,16 @@ export default async function InvoiceDetailPage({
             )}
           </div>
           <div className="text-right">
-            <div className="mb-1 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-lg font-bold text-white">
+            <div
+              className="mb-1 inline-flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold text-white shadow-sm"
+              style={{ backgroundColor: primaryColor }}
+            >
               T
             </div>
-            <h2 className="text-xl font-bold uppercase text-brand-700">
-              {invoice.type === "SALES" ? "Tax Invoice (Sales)" : "Purchase Bill (Inward)"}
+            <h2 className="text-xl font-bold uppercase" style={{ color: primaryColor }}>
+              {customization.headerText || (invoice.type === "SALES" ? "Tax Invoice (Sales)" : "Purchase Bill (Inward)")}
             </h2>
-            <p className="text-sm text-slate-500">Generated by Taily</p>
+            <p className="text-sm text-slate-500">{displayName}</p>
           </div>
         </div>
 
@@ -268,51 +301,55 @@ export default async function InvoiceDetailPage({
         </div>
 
         {/* Payment & Bank Details + Dynamic UPI QR Code */}
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-xs">
-          {/* Bank details */}
-          <div className="sm:col-span-2 space-y-1.5">
-            <p className="font-bold uppercase tracking-wider text-slate-700 text-[11px] border-b border-slate-200 pb-1">
-              Bank & Payment Details
-            </p>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600 pt-1">
-              <div>
-                <span className="text-slate-400">Bank Name: </span>
-                <span className="font-semibold text-slate-800">{company.bankName || "State Bank of India"}</span>
+        {customization.showBankDetails && (
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-xs">
+            {/* Bank details */}
+            <div className="sm:col-span-2 space-y-1.5">
+              <p className="font-bold uppercase tracking-wider text-slate-700 text-[11px] border-b border-slate-200 pb-1">
+                Bank & Payment Details
+              </p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600 pt-1">
+                <div>
+                  <span className="text-slate-400">Bank Name: </span>
+                  <span className="font-semibold text-slate-800">{customization.bankName || company.bankName || "State Bank of India"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Account No: </span>
+                  <span className="font-semibold font-mono text-slate-800">{customization.accountNo || company.accountNo || "123456789012"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">IFSC Code: </span>
+                  <span className="font-semibold font-mono text-slate-800">{customization.ifscCode || company.ifscCode || "SBIN0001234"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Branch: </span>
+                  <span className="font-medium text-slate-800">{customization.branchName || company.branchName || "Main Branch"}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400">Account No: </span>
-                <span className="font-semibold font-mono text-slate-800">{company.accountNo || "123456789012"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400">IFSC Code: </span>
-                <span className="font-semibold font-mono text-slate-800">{company.ifscCode || "SBIN0001234"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400">Branch: </span>
-                <span className="font-medium text-slate-800">{company.branchName || "Main Branch"}</span>
-              </div>
+
+              {(customization.termsAndConditions || company.terms) && (
+                <div className="pt-2 border-t border-slate-200 mt-2">
+                  <p className="font-bold text-slate-600 text-[10px] uppercase">Terms & Conditions:</p>
+                  <p className="text-[10px] text-slate-500 whitespace-pre-line leading-relaxed mt-0.5">
+                    {customization.termsAndConditions || company.terms}
+                  </p>
+                </div>
+              )}
             </div>
 
-            {company.terms && (
-              <div className="pt-2 border-t border-slate-200 mt-2">
-                <p className="font-bold text-slate-600 text-[10px] uppercase">Terms & Conditions:</p>
-                <p className="text-[10px] text-slate-500 whitespace-pre-line leading-relaxed mt-0.5">
-                  {company.terms}
-                </p>
+            {/* Dynamic UPI QR Code */}
+            {customization.showUpiQr && (
+              <div className="flex justify-center sm:justify-end items-center">
+                <UpiQrCode
+                  upiId={effectiveUpiId}
+                  payeeName={displayName}
+                  amount={grand}
+                  invoiceNo={invoice.invoiceNo}
+                />
               </div>
             )}
           </div>
-
-          {/* Dynamic UPI QR Code */}
-          <div className="flex justify-center sm:justify-end items-center">
-            <UpiQrCode
-              upiId={effectiveUpiId}
-              payeeName={company.name}
-              amount={grand}
-              invoiceNo={invoice.invoiceNo}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Notes + signature */}
         <div className="mt-6 flex items-end justify-between">
@@ -324,14 +361,24 @@ export default async function InvoiceDetailPage({
               </p>
             )}
             <p className="text-xs text-slate-400">
-              This is a computer-generated invoice and does not require a physical signature.
+              {customization.footerNotes || "Thank you for doing business with us!"}
             </p>
           </div>
-          <div className="text-center">
-            <div className="mb-1 h-12 w-40 border-b border-slate-300" />
-            <p className="text-sm font-medium text-slate-600">Authorised Signatory</p>
-            <p className="text-[11px] text-slate-400">{company.name}</p>
-          </div>
+          {customization.showSignature && (
+            <div className="text-center">
+              {customization.signatureUrl ? (
+                <img
+                  src={customization.signatureUrl}
+                  alt="Signature"
+                  className="mb-1 h-12 w-40 object-contain mx-auto"
+                />
+              ) : (
+                <div className="mb-1 h-12 w-40 border-b border-slate-300" />
+              )}
+              <p className="text-sm font-medium text-slate-600">{customization.signatureLabel || "Authorised Signatory"}</p>
+              <p className="text-[11px] text-slate-400">{displayName}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

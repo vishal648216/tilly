@@ -1,16 +1,43 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatNumber, numberToWords } from "@/lib/currency";
 import UpiQrCode from "@/components/UpiQrCode";
 import PublicInvoiceActions from "./PublicInvoiceActions";
+import { checkRateLimit, recordRateLimitFailure } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Tax Invoice | Taily",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function PublicInvoicePage({
   params,
 }: {
   params: { id: string };
 }) {
+  const reqHeaders = headers();
+  const forwarded = reqHeaders.get("x-forwarded-for");
+  const ipAddress = forwarded ? forwarded.split(",")[0].trim() : reqHeaders.get("x-real-ip") || "unknown";
+
+  // Rate limit public invoice views to 30/minute per IP
+  const rateLimit = await checkRateLimit(`public_inv:${ipAddress}`, 30, 60 * 1000);
+  if (!rateLimit.allowed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+        <div className="card p-8 max-w-md text-center">
+          <h2 className="text-lg font-bold text-red-600 mb-2">Rate Limit Exceeded</h2>
+          <p className="text-sm text-slate-600">Too many requests. Please wait a minute before accessing invoices again.</p>
+        </div>
+      </div>
+    );
+  }
+
   const invoice = await prisma.invoice.findUnique({
     where: { id: params.id },
     include: {
@@ -20,7 +47,16 @@ export default async function PublicInvoicePage({
     },
   });
 
-  if (!invoice) notFound();
+  // Privacy protection: Only customer-facing SALES and SALES_RETURN invoices can be viewed publicly
+  // Internal vendor purchase bills and debit notes are strictly blocked
+  if (!invoice || (invoice.type !== "SALES" && invoice.type !== "SALES_RETURN")) {
+    await recordRateLimitFailure(`public_inv:${ipAddress}`, {
+      ipAddress,
+      action: "SUSPICIOUS_ACCESS",
+      details: `Attempted public access to non-existent or vendor invoice ID: ${params.id}`,
+    }, 60 * 1000);
+    notFound();
+  }
 
   const company = invoice.company;
   const isInterState = parseFloat(invoice.igstTotal.toString()) > 0;

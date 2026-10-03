@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useCompanySettings } from "@/context/CompanySettingsContext";
 import {
   LayoutDashboard,
   Receipt,
@@ -26,65 +27,125 @@ import {
   RotateCcw,
   PackageMinus,
   Plus,
+  Warehouse as WarehouseIcon,
+  FileText,
+  Briefcase,
+  Layers,
+  SlidersHorizontal,
+  ArrowRightLeft,
+  Scale,
+  PieChart,
+  Building2,
+  CreditCard,
+  Palette,
+  ScanLine,
+  Factory,
+  HardDrive,
 } from "lucide-react";
 
-interface NavGroup {
-  title: string;
-  items: {
-    href: string;
-    newHref?: string;
-    label: string;
-    icon: any;
-    badge?: string;
-  }[];
-}
-
-const navGroups: NavGroup[] = [
-  {
-    title: "Overview",
-    items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    title: "Transactions",
-    items: [
-      { href: "/invoices", newHref: "/invoices/new", label: "Invoices (Sales)", icon: Receipt },
-      { href: "/sales-return", newHref: "/sales-return/new", label: "Sales Return (CN)", icon: RotateCcw },
-      { href: "/purchases", newHref: "/invoices/new?type=PURCHASE", label: "Purchases (Bills)", icon: ShoppingCart },
-      { href: "/purchase-return", newHref: "/purchase-return/new", label: "Vendor Return (Debit Note)", icon: PackageMinus, badge: "NEW" },
-      { href: "/expenses", label: "Expenses", icon: Wallet },
-    ],
-  },
-  {
-    title: "Management",
-    items: [
-      { href: "/parties", newHref: "/parties/new", label: "Parties (CRM)", icon: Users },
-      { href: "/items", newHref: "/items/new", label: "Items & Inventory", icon: Package },
-      { href: "/day-book", label: "Day Book", icon: CalendarDays },
-    ],
-  },
-  {
-    title: "Accounting & Ledger",
-    items: [
-      { href: "/ledger", label: "Party Ledger", icon: BookOpen },
-      { href: "/ledger/account", label: "Account Ledger", icon: FolderArchive },
-      { href: "/vouchers", newHref: "/vouchers/new", label: "Vouchers & Journal", icon: FileSpreadsheet },
-    ],
-  },
-  {
-    title: "Reports & Setup",
-    items: [
-      { href: "/reports", label: "Reports & Backup", icon: BarChart3 },
-      { href: "/settings", label: "Settings & UPI QR", icon: Settings },
-    ],
-  },
-];
-
-export default function Sidebar({ companyName }: { companyName: string }) {
+export default function Sidebar({
+  companyName,
+  businessType: propBusinessType,
+}: {
+  companyName: string;
+  businessType?: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const { settings, businessType: ctxBusinessType } = useCompanySettings();
+  const currentBusinessType = propBusinessType || ctxBusinessType || "Retail";
+
+  // Build dynamic navigation based on company settings
+  const navGroups = [
+    {
+      title: "Overview",
+      items: [
+        { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: "Transactions",
+      items: [
+        { href: "/invoices", newHref: "/invoices/new", label: "Invoices (Sales)", icon: Receipt },
+        ...(settings.quotationEnabled
+          ? [{ href: "/quotations", newHref: "/quotations/new", label: "Quotations", icon: FileText, badge: "QUO" }]
+          : []),
+        ...(settings.salesOrderEnabled
+          ? [{ href: "/sales-orders", newHref: "/sales-orders/new", label: "Sales Orders", icon: ShoppingCart, badge: "SO" }]
+          : []),
+        ...(settings.deliveryChallanEnabled
+          ? [{ href: "/delivery-challans", newHref: "/delivery-challans/new", label: "Delivery Challans", icon: ArrowRight, badge: "DC" }]
+          : []),
+        { href: "/sales-return", newHref: "/sales-return/new", label: "Sales Return (CN)", icon: RotateCcw },
+        { href: "/purchases", newHref: "/invoices/new?type=PURCHASE", label: "Purchases (Bills)", icon: ShoppingCart },
+        ...(settings.purchaseOrderEnabled
+          ? [{ href: "/purchase-orders", newHref: "/purchase-orders/new", label: "Purchase Orders", icon: ShoppingCart, badge: "PO" }]
+          : []),
+        ...(settings.goodsReceiptEnabled
+          ? [{ href: "/goods-receipts", newHref: "/goods-receipts/new", label: "Goods Receipts (GRN)", icon: Package, badge: "GRN" }]
+          : []),
+        ...(settings.inventoryEnabled
+          ? [{ href: "/purchase-return", newHref: "/purchase-return/new", label: "Vendor Return (DN)", icon: PackageMinus }]
+          : []),
+        { href: "/ocr-bill", label: "OCR Bill Import", icon: ScanLine },
+        { href: "/expenses", label: "Expenses", icon: Wallet },
+      ],
+    },
+    {
+      title: "Management",
+      items: [
+        { href: "/parties", newHref: "/parties/new", label: "Parties (CRM)", icon: Users },
+        settings.inventoryEnabled
+          ? { href: "/items", newHref: "/items/new", label: "Items & Catalog", icon: Package }
+          : { href: "/items", newHref: "/items/new", label: "Services Catalog", icon: Briefcase },
+        ...(settings.inventoryEnabled
+          ? [
+              { href: "/stock-ledger", label: "Stock Ledger", icon: ArrowRightLeft },
+              { href: "/inventory/adjustments", label: "Stock Adjustments", icon: SlidersHorizontal },
+            ]
+          : []),
+        ...(settings.batchEnabled || settings.expiryEnabled
+          ? [{ href: "/inventory/batches", label: "Batches & Expiry", icon: Layers }]
+          : []),
+        ...(settings.manufacturingEnabled
+          ? [{ href: "/manufacturing", label: "Manufacturing & BOM", icon: Factory }]
+          : []),
+        ...(settings.warehouseEnabled
+          ? [
+              { href: "/warehouses", label: "Warehouses & Godowns", icon: WarehouseIcon, badge: "WH" },
+              { href: "/inventory/transfers", label: "Stock Transfers", icon: ArrowRightLeft },
+            ]
+          : []),
+        { href: "/day-book", label: "Day Book", icon: CalendarDays },
+      ],
+    },
+    {
+      title: "Accounting & Ledger",
+      items: [
+        { href: "/reports/balance-sheet", label: "Balance Sheet", icon: Scale },
+        { href: "/reports/profit-loss", label: "Profit & Loss", icon: PieChart },
+        { href: "/reports/trial-balance", label: "Trial Balance", icon: Layers },
+        { href: "/reports/general-ledger", label: "General Ledger", icon: BookOpen },
+        { href: "/reports/cash-book", label: "Cash Book", icon: CreditCard },
+        { href: "/reports/bank-book", label: "Bank Book", icon: Building2 },
+        { href: "/reports/day-book", label: "Day Book / Journal", icon: CalendarDays },
+        { href: "/ledger", label: "Party Ledger", icon: FolderArchive },
+        { href: "/vouchers", newHref: "/vouchers/new", label: "Vouchers & Journal", icon: FileSpreadsheet },
+      ],
+    },
+    {
+      title: "Reports & Setup",
+      items: [
+        { href: "/import", label: "Import Wizard", icon: FileSpreadsheet },
+        { href: "/backup", label: "Database & Backup", icon: HardDrive },
+        { href: "/reports", label: "Reports Center", icon: BarChart3 },
+        { href: "/subscription", label: "Plan & Subscription", icon: CreditCard },
+        { href: "/settings/branding", label: "Invoice Branding", icon: Palette },
+        { href: "/settings", label: "Settings & Profile", icon: Settings },
+      ],
+    },
+  ];
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -125,10 +186,15 @@ export default function Sidebar({ companyName }: { companyName: string }) {
           </div>
         </div>
 
-        {/* Company Quick Badge */}
+        {/* Company Quick Badge & Industry Template */}
         <div className="border-b border-slate-100 px-4 py-2.5 bg-slate-50/70 flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400">Current Business</p>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">Company</span>
+              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+                {currentBusinessType}
+              </span>
+            </div>
             <p className="truncate text-xs font-bold text-slate-800">{companyName}</p>
           </div>
           <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-2" title="Database Connected" />

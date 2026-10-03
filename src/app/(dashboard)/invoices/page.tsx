@@ -171,9 +171,17 @@ export default async function InvoicesPage({
                       <span className={`badge ${
                         inv.status === "PAID"
                           ? "bg-emerald-100 text-emerald-800"
-                          : inv.status === "PARTIAL"
+                          : inv.status === "PARTIALLY_PAID" || inv.status === "PARTIAL"
                           ? "bg-amber-100 text-amber-800"
-                          : "bg-red-100 text-red-800"
+                          : inv.status === "DRAFT"
+                          ? "bg-slate-100 text-slate-700"
+                          : inv.status === "OVERDUE"
+                          ? "bg-red-100 text-red-800"
+                          : inv.status === "CANCELLED"
+                          ? "bg-rose-100 text-rose-800 line-through"
+                          : inv.status === "REVERSED"
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-blue-100 text-blue-800"
                       }`}>
                         {inv.status}
                       </span>

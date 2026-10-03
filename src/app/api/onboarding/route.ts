@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { companyName, city, state, gstin } = body;
+    const { companyName, city, state, gstin, businessType } = body;
 
     if (!companyName) return NextResponse.json({ error: "Company name required" }, { status: 400 });
 
@@ -19,11 +19,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Company already exists" }, { status: 400 });
     }
 
+    const { applyBusinessTemplate } = await import("@/lib/featureFlags");
+    const bType = businessType || "Retail";
+
     const company = await prisma.$transaction(async (tx) => {
       const comp = await tx.company.create({
         data: {
           name: companyName,
           legalName: companyName,
+          businessType: bType,
           city: city || null,
           state: state || null,
           gstin: gstin || null,
@@ -33,7 +37,7 @@ export async function POST(req: Request) {
       });
 
       await tx.companyMember.create({
-        data: { userId: user.id, companyId: comp.id, role: "ADMIN" },
+        data: { userId: user.id, companyId: comp.id, role: "COMPANY_ADMIN" },
       });
 
       await tx.account.createMany({
@@ -45,6 +49,8 @@ export async function POST(req: Request) {
           groupId: a.groupId,
         })),
       });
+
+      await applyBusinessTemplate(comp.id, bType, tx);
 
       return comp;
     });

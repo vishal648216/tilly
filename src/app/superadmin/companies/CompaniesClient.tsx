@@ -21,12 +21,18 @@ import {
   Mail,
   MapPin,
   TrendingUp,
+  ShieldAlert,
 } from "lucide-react";
 
 interface CompanyItem {
   id: string;
   name: string;
   legalName: string | null;
+  status: string;
+  suspendedReason?: string | null;
+  planName?: string;
+  planCode?: string;
+  subscriptionStatus?: string;
   email: string | null;
   phone: string | null;
   city: string | null;
@@ -54,8 +60,10 @@ interface CompanyItem {
 
 export default function CompaniesClient({
   initialCompanies,
+  availablePlans,
 }: {
   initialCompanies: CompanyItem[];
+  availablePlans?: Array<{ id: string; code: string; name: string; price: number }>;
 }) {
   const router = useRouter();
   const [companies, setCompanies] = useState<CompanyItem[]>(initialCompanies);
@@ -66,6 +74,67 @@ export default function CompaniesClient({
   const [loadingAction, setLoadingAction] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Status & Subscription Plan Modal state
+  const [statusModalComp, setStatusModalComp] = useState<CompanyItem | null>(null);
+  const [newStatus, setNewStatus] = useState("ACTIVE");
+  const [suspendReason, setSuspendReason] = useState("");
+  const [selectedPlanCode, setSelectedPlanCode] = useState("STARTER");
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  function openStatusModal(comp: CompanyItem) {
+    setStatusModalComp(comp);
+    setNewStatus(comp.status || "ACTIVE");
+    setSuspendReason(comp.suspendedReason || "");
+    setSelectedPlanCode(comp.planCode || "STARTER");
+  }
+
+  async function handleSaveStatus() {
+    if (!statusModalComp) return;
+    if (newStatus === "SUSPENDED" && !suspendReason.trim()) {
+      setToast({ type: "error", text: "A suspension reason is required when suspending an account." });
+      return;
+    }
+
+    setSavingStatus(true);
+    try {
+      const res = await fetch(`/api/superadmin/companies/${statusModalComp.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          suspendedReason: newStatus === "SUSPENDED" ? suspendReason.trim() : null,
+          planCode: selectedPlanCode,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update status.");
+
+      const resolvedPlanName = availablePlans?.find((p) => p.code === selectedPlanCode)?.name || selectedPlanCode;
+
+      setCompanies((prev) =>
+        prev.map((c) =>
+          c.id === statusModalComp.id
+            ? {
+                ...c,
+                status: newStatus,
+                suspendedReason: newStatus === "SUSPENDED" ? suspendReason.trim() : null,
+                planCode: selectedPlanCode,
+                planName: resolvedPlanName,
+              }
+            : c
+        )
+      );
+
+      setToast({ type: "success", text: `Company status successfully updated to ${newStatus}.` });
+      setStatusModalComp(null);
+    } catch (err: any) {
+      setToast({ type: "error", text: err.message });
+    } finally {
+      setSavingStatus(false);
+    }
+  }
 
   // New Company Form State
   const [newComp, setNewComp] = useState({
@@ -290,12 +359,35 @@ export default function CompaniesClient({
                     {comp.legalName && comp.legalName !== comp.name && (
                       <span className="text-xs text-slate-400 italic">({comp.legalName})</span>
                     )}
+                    {/* Status Badge */}
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                        comp.status === "ACTIVE"
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : comp.status === "TRIAL"
+                          ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                          : comp.status === "SUSPENDED"
+                          ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {comp.status}
+                    </span>
+                    {/* Plan Badge */}
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      Plan: {comp.planName || "Trial"}
+                    </span>
                     {comp.gstin && (
                       <span className="font-mono rounded-md bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-slate-700">
                         GST: {comp.gstin}
                       </span>
                     )}
                   </div>
+                  {comp.status === "SUSPENDED" && comp.suspendedReason && (
+                    <div className="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 px-3 py-1.5 rounded-xl font-medium">
+                      ⚠️ Account Suspended: {comp.suspendedReason}
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
                     {(comp.city || comp.state) && (
@@ -340,6 +432,15 @@ export default function CompaniesClient({
 
                 {/* Actions */}
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => openStatusModal(comp)}
+                    title="Manage Subscription Plan & Account Status (Suspend/Activate)"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/20 border border-purple-500/30 px-3.5 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500 hover:text-slate-950 transition-colors"
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    Status & Plan
+                  </button>
+
                   <button
                     onClick={() => handleSwitchToCompany(comp.id)}
                     disabled={isSwitching}
@@ -656,6 +757,108 @@ export default function CompaniesClient({
                   {loadingAction ? "Deleting..." : "Permanently Delete"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Status & Plan Modal */}
+      {statusModalComp && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-purple-400" />
+                Manage Status & Plan
+              </h2>
+              <button
+                onClick={() => setStatusModalComp(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-800">
+              <p className="text-sm font-semibold text-white">{statusModalComp.name}</p>
+              <p className="text-xs text-slate-400">
+                Current Plan: <span className="text-purple-400 font-bold">{statusModalComp.planName}</span> | Status: <span className="font-bold text-slate-200">{statusModalComp.status}</span>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">
+                Account Status
+              </label>
+              <select
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:border-purple-500 focus:outline-none"
+              >
+                <option value="ACTIVE">ACTIVE - Fully Operational</option>
+                <option value="TRIAL">TRIAL - 14-Day Free Evaluation</option>
+                <option value="SUSPENDED">SUSPENDED - Block Transactions & Mutations</option>
+                <option value="EXPIRED">EXPIRED - Trial/Subscription Expired</option>
+                <option value="CANCELLED">CANCELLED - Account Decommissioned</option>
+              </select>
+            </div>
+
+            {newStatus === "SUSPENDED" && (
+              <div>
+                <label className="block text-xs font-semibold text-rose-400 mb-1">
+                  Suspension Reason (Required)
+                </label>
+                <textarea
+                  rows={2}
+                  value={suspendReason}
+                  onChange={(e) => setSuspendReason(e.target.value)}
+                  placeholder="Specify why this business account is suspended..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-rose-800 text-white text-sm focus:outline-none placeholder-slate-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">
+                Subscription Plan
+              </label>
+              <select
+                value={selectedPlanCode}
+                onChange={(e) => setSelectedPlanCode(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:border-purple-500 focus:outline-none"
+              >
+                {availablePlans && availablePlans.length > 0 ? (
+                  availablePlans.map((p) => (
+                    <option key={p.code} value={p.code}>
+                      {p.name} (₹{p.price}/mo)
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="TRIAL">Free Trial</option>
+                    <option value="STARTER">Starter Plan (₹499/mo)</option>
+                    <option value="PRO">Professional Plan (₹1,499/mo)</option>
+                    <option value="ENTERPRISE">Enterprise Plan (₹4,999/mo)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setStatusModalComp(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStatus}
+                disabled={savingStatus}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition shadow-lg disabled:opacity-50"
+              >
+                {savingStatus ? "Saving..." : "Apply Status & Plan"}
+              </button>
             </div>
           </div>
         </div>

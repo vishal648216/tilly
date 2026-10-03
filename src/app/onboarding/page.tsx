@@ -9,6 +9,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     companyName: "",
+    businessType: "Retail",
     city: "",
     state: "",
     gstin: "",
@@ -51,6 +52,7 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyName: form.companyName.trim(),
+          businessType: form.businessType,
           city: form.city.trim() || null,
           state: form.state.trim() || null,
           gstin: form.gstin.trim().toUpperCase() || null,
@@ -109,6 +111,32 @@ export default function OnboardingPage() {
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-700">
+              Business Model / Industry <span className="text-red-500">*</span>
+            </label>
+            <select
+              className="input bg-white"
+              value={form.businessType}
+              onChange={(e) => update("businessType", e.target.value)}
+            >
+              <option value="Retail">Retail (Store / Counter Sales / Barcode)</option>
+              <option value="Wholesale">Wholesale (B2B Bulk / Quotations / Price Tiers)</option>
+              <option value="Distributor">Distributor (Multi-Warehouse / Routes / Sales Team)</option>
+              <option value="Service">Service (No Physical Stock / Invoices / SLA)</option>
+              <option value="Garments">Garments & Textiles (Sizes / Colors / Matrix Variants)</option>
+              <option value="Electronics">Electronics & IT (IMEI / Serial No / Warranty)</option>
+              <option value="Pharmacy">Pharmacy / Cosmetics (Batch / Expiry / Licenses)</option>
+              <option value="Restaurant">Restaurant (Food & Beverage / Wastage / POS)</option>
+              <option value="Hardware">Hardware & Sanitary (Technical Specs / Bin Loc)</option>
+              <option value="Manufacturing">Manufacturing (BOM / Production / Work Orders)</option>
+              <option value="Custom">Custom (Configurable Business Model)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Taily will pre-configure feature flags and accounting workflows automatically for this business.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

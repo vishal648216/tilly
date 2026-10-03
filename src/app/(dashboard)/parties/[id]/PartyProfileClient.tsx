@@ -34,6 +34,20 @@ interface Party {
   state: string | null;
   pincode: string | null;
   openingBalance: string | number;
+  contactPerson?: string | null;
+  code?: string | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  gstTreatment?: string | null;
+  creditLimit?: number | string | null;
+  creditDays?: number | null;
+  paymentTerms?: string | null;
+  priceList?: string | null;
+  bankDetails?: string | null;
+  salesperson?: string | null;
+  notes?: string | null;
+  tags?: string | null;
+  customFields?: string | null;
 }
 
 interface Invoice {
@@ -232,6 +246,18 @@ export default function PartyProfileClient({
           </h2>
 
           <div className="space-y-3 text-sm">
+            {party.code && (
+              <div>
+                <p className="text-xs text-slate-400">Account Code</p>
+                <p className="font-semibold font-mono text-slate-800">{party.code}</p>
+              </div>
+            )}
+            {party.contactPerson && (
+              <div>
+                <p className="text-xs text-slate-400">Contact Person</p>
+                <p className="font-semibold text-slate-800">{party.contactPerson}</p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-slate-400">Contact Number</p>
               <p className="font-semibold text-slate-800">{party.phone || "—"}</p>
@@ -241,8 +267,10 @@ export default function PartyProfileClient({
               <p className="font-medium text-slate-800">{party.email || "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">GSTIN</p>
-              <p className="font-medium font-mono text-slate-800">{party.gstin || "Unregistered"}</p>
+              <p className="text-xs text-slate-400">GSTIN / Tax ID</p>
+              <p className="font-medium font-mono text-slate-800">
+                {party.gstin || "Unregistered"} {party.gstTreatment && <span className="text-xs text-slate-400">({party.gstTreatment})</span>}
+              </p>
             </div>
             <div>
               <p className="text-xs text-slate-400">PAN Number</p>
@@ -251,9 +279,59 @@ export default function PartyProfileClient({
             <div>
               <p className="text-xs text-slate-400">Billing Address</p>
               <p className="font-medium text-slate-800">
-                {[party.address, party.city, party.state, party.pincode].filter(Boolean).join(", ") || "—"}
+                {party.billingAddress || [party.address, party.city, party.state, party.pincode].filter(Boolean).join(", ") || "—"}
               </p>
             </div>
+            {party.shippingAddress && (
+              <div>
+                <p className="text-xs text-slate-400">Shipping Address</p>
+                <p className="font-medium text-slate-800">{party.shippingAddress}</p>
+              </div>
+            )}
+
+            {(party.creditLimit || party.creditDays || party.paymentTerms) && (
+              <div className="pt-2 border-t border-slate-100">
+                <p className="text-xs font-bold text-slate-600 mb-1.5">Commercial Terms</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {party.creditLimit && (
+                    <div className="bg-slate-50 p-2 rounded">
+                      <span className="text-slate-400 block">Credit Limit</span>
+                      <span className="font-semibold text-slate-800">{formatCurrency(party.creditLimit)}</span>
+                    </div>
+                  )}
+                  {party.creditDays && (
+                    <div className="bg-slate-50 p-2 rounded">
+                      <span className="text-slate-400 block">Credit Period</span>
+                      <span className="font-semibold text-slate-800">{party.creditDays} Days</span>
+                    </div>
+                  )}
+                  {party.paymentTerms && (
+                    <div className="col-span-2 bg-slate-50 p-2 rounded">
+                      <span className="text-slate-400 block">Payment Terms</span>
+                      <span className="font-semibold text-slate-800">{party.paymentTerms}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(party.priceList || party.salesperson) && (
+              <div className="pt-2 border-t border-slate-100 text-xs space-y-1">
+                {party.priceList && (
+                  <p><span className="text-slate-400">Assigned Pricing:</span> <span className="font-medium text-slate-800">{party.priceList}</span></p>
+                )}
+                {party.salesperson && (
+                  <p><span className="text-slate-400">Account Manager:</span> <span className="font-medium text-slate-800">{party.salesperson}</span></p>
+                )}
+              </div>
+            )}
+
+            {party.bankDetails && (
+              <div className="pt-2 border-t border-slate-100 text-xs">
+                <p className="text-slate-400">Bank / Settlement Details</p>
+                <p className="font-medium text-slate-800 whitespace-pre-wrap">{party.bankDetails}</p>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex gap-2">

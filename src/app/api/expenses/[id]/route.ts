@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getCurrentCompany } from "@/lib/session";
+import { requirePermission, validateEntityBelongsToCompany, handleAuthError } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { recordAuditLog, getClientMetadata } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -9,18 +11,22 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
-
+    const context = await requirePermission(PERMISSIONS.EXPENSE_CREATE, req);
+    const companyId = context.company.id;
     const id = params.id;
+
     if (!id) {
       return NextResponse.json({ error: "Expense ID is required" }, { status: 400 });
     }
 
+    // IDOR Check
+    await validateEntityBelongsToCompany("expense", id, companyId, req, {
+      userId: context.user.id,
+      userEmail: context.user.email,
+    });
+
     const expense = await prisma.expense.findFirst({
-      where: { id, companyId: company.id },
+      where: { id, companyId },
     });
 
     if (!expense) {
@@ -39,9 +45,21 @@ export async function DELETE(
       }
     });
 
-    return NextResponse.json({ success: true, message: "Expense deleted successfully" });
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "DELETE_EXPENSE",
+      entity: "Expense",
+      entityId: expense.id,
+      details: `Deleted expense id ${expense.id}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return NextResponse.json({ ok: true, success: true, message: "Expense deleted successfully" });
   } catch (err: any) {
-    console.error("Expense deletion error:", err);
-    return NextResponse.json({ error: err.message || "Failed to delete expense" }, { status: 500 });
+    return handleAuthError(err);
   }
 }

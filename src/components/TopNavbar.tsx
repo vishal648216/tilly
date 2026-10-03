@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import CompanySwitcher from "./CompanySwitcher";
+import NotificationBell from "./NotificationBell";
+import CommandPalette from "./CommandPalette";
+
 interface TopNavbarProps {
   companyName: string;
   userName: string;
@@ -40,42 +44,66 @@ export default function TopNavbar({ companyName, userName }: { companyName: stri
     router.refresh();
   }
 
+  function handleOpenSearch() {
+    window.dispatchEvent(new CustomEvent("open-command-palette"));
+  }
+
   return (
-    <header className="no-print sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 sm:px-6 lg:px-8 backdrop-blur-md shadow-xs">
-      {/* Left side: Business context & Today's date */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-1.5 border border-slate-200/80 shadow-2xs">
-          <Building2 className="h-4 w-4 text-emerald-600 shrink-0" />
-          <span className="text-xs font-bold text-slate-800 truncate max-w-[160px] sm:max-w-[220px]">
-            {companyName}
-          </span>
-          <span className="hidden sm:inline-flex items-center rounded-md bg-emerald-100/80 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-            FY 24-25
-          </span>
+    <>
+      <CommandPalette />
+      <header className="no-print sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 sm:px-6 lg:px-8 backdrop-blur-md shadow-xs">
+        {/* Left side: Business context & Today's date */}
+        <div className="flex items-center gap-3">
+          <CompanySwitcher activeCompanyName={companyName} />
+
+          <div className="hidden sm:inline-flex items-center rounded-md bg-emerald-100/80 px-2 py-1 text-[10px] font-bold text-emerald-800">
+            FY 26-27
+          </div>
+
+          <div className="hidden xl:flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-50/60 px-2.5 py-1.5 rounded-xl border border-slate-100">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <span>{today}</span>
+          </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-50/60 px-2.5 py-1.5 rounded-xl border border-slate-100">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          <span>{today}</span>
+        {/* Center: Global Search Bar */}
+        <div className="flex-1 max-w-md mx-4 hidden md:block">
+          <button
+            onClick={handleOpenSearch}
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 px-3.5 py-1.5 text-xs text-slate-400 hover:border-slate-300 hover:bg-white hover:text-slate-600 transition-all shadow-2xs group"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="h-3.5 w-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+              <span>Search invoices, parties, items, vouchers...</span>
+            </div>
+            <kbd className="rounded bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400 border border-slate-200 shadow-2xs">
+              Ctrl K
+            </kbd>
+          </button>
         </div>
-      </div>
 
-      {/* Right side: Live Sync, Quick Create, Profile */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
-        {/* Cloud/DB sync indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/60">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          Live & Synced
-        </div>
+        {/* Right side: Search (mobile), Notifications, Quick Create, Profile */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Mobile search trigger */}
+          <button
+            onClick={handleOpenSearch}
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200/80"
+            title="Search (Ctrl + K)"
+          >
+            <Search className="h-4 w-4" />
+          </button>
 
-        {/* Quick Action: New Invoice */}
-        <Link
-          href="/invoices/new"
-          className="hidden sm:inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 hover:from-emerald-700 hover:to-teal-700 hover:shadow-md transition-all active:scale-95"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Invoice</span>
-        </Link>
+          {/* Operational Notification Bell */}
+          <NotificationBell />
+
+          {/* Quick Action: New Invoice */}
+          <Link
+            href="/invoices/new"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 hover:from-emerald-700 hover:to-teal-700 hover:shadow-md transition-all active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>New Invoice</span>
+          </Link>
 
         {/* Quick Actions Dropdown / User Profile */}
         <div className="relative">
@@ -135,5 +163,6 @@ export default function TopNavbar({ companyName, userName }: { companyName: stri
         </div>
       </div>
     </header>
+  </>
   );
 }

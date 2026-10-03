@@ -35,6 +35,7 @@ export default async function PartyDetailPage({
       party={{
         ...party,
         openingBalance: party.openingBalance.toString(),
+        creditLimit: party.creditLimit ? party.creditLimit.toString() : null,
       }}
       invoices={invoices.map((i) => ({
         ...i,

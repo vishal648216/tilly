@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import UpiQrCode from "@/components/UpiQrCode";
+import { BUSINESS_TEMPLATES, BusinessType } from "@/lib/businessTemplates";
+import { CompanySettingsData, FeatureFlagKey } from "@/lib/featureFlags";
 import {
   isValidEmail,
   isValidPhone,
@@ -12,51 +14,66 @@ import {
   isValidUpi,
 } from "@/lib/validators";
 import {
-  Settings,
-  QrCode,
-  Landmark,
   Building2,
-  FileText,
+  Sparkles,
+  Sliders,
+  Tag,
+  Landmark,
+  Save,
   CheckCircle2,
   AlertCircle,
-  Save,
-  Phone,
-  Mail,
+  QrCode,
+  FileSpreadsheet,
+  Download,
+  Trash2,
+  Plus,
+  Layers,
+  Check,
 } from "lucide-react";
 
-interface Company {
-  id: string;
-  name: string;
-  legalName: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  pincode: string | null;
-  gstin: string | null;
-  pan: string | null;
-  upiId: string | null;
-  bankName: string | null;
-  accountNo: string | null;
-  ifscCode: string | null;
-  branchName: string | null;
-  terms: string | null;
-}
+type SettingsTab = "profile" | "templates" | "features" | "customFields" | "banking" | "backup";
 
-export default function SettingsClient({ company }: { company: Company }) {
+export default function SettingsClient({
+  company,
+  initialSettings,
+  initialCustomFields,
+}: {
+  company: any;
+  initialSettings: CompanySettingsData;
+  initialCustomFields: any[];
+}) {
   const router = useRouter();
-  const [form, setForm] = useState({
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+
+  // Profile Form State
+  const [profileForm, setProfileForm] = useState({
     name: company.name || "",
     legalName: company.legalName || "",
+    businessType: company.businessType || "Retail",
+    industry: company.industry || "Retail & Consumer Goods",
+    logo: company.logo || "",
+    website: company.website || "",
     email: company.email || "",
     phone: company.phone || "",
     address: company.address || "",
     city: company.city || "",
     state: company.state || "",
+    country: company.country || "India",
     pincode: company.pincode || "",
     gstin: company.gstin || "",
     pan: company.pan || "",
+    currency: company.currency || "INR",
+    financialYear: company.financialYear || "2026-27",
+    timezone: company.timezone || "Asia/Kolkata",
+  });
+
+  // Feature Flags State
+  const [settingsForm, setSettingsForm] = useState<CompanySettingsData>({
+    ...initialSettings,
+  });
+
+  // Banking State
+  const [bankingForm, setBankingForm] = useState({
     upiId: company.upiId || "taily@upi",
     bankName: company.bankName || "State Bank of India",
     accountNo: company.accountNo || "123456789012",
@@ -67,494 +84,908 @@ export default function SettingsClient({ company }: { company: Company }) {
       "1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged on delayed payments after due date.\n3. Subject to local jurisdiction.",
   });
 
+  // Custom Fields State
+  const [customFields, setCustomFields] = useState<any[]>(initialCustomFields || []);
+  const [newCustomField, setNewCustomField] = useState({
+    entityType: "PRODUCT",
+    fieldName: "",
+    fieldLabel: "",
+    fieldType: "TEXT",
+    isRequired: false,
+    options: "",
+  });
+
   const [loading, setLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [templateLoading, setTemplateLoading] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  function update(key: string, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
+  function triggerSuccess(msg: string) {
+    setSavedMsg(msg);
+    setErrorMsg("");
+    setTimeout(() => setSavedMsg(""), 4000);
   }
 
-  function handleBlur(key: string) {
-    setTouched((t) => ({ ...t, [key]: true }));
-  }
-
-  // --- Validations ---
-  const isUpiValid = useMemo(() => {
-    if (!form.upiId.trim()) return false;
-    return isValidUpi(form.upiId);
-  }, [form.upiId]);
-
-  const isPhoneValid = useMemo(() => {
-    if (!form.phone.trim()) return true;
-    return isValidPhone(form.phone);
-  }, [form.phone]);
-
-  const isEmailValid = useMemo(() => {
-    if (!form.email.trim()) return true;
-    return isValidEmail(form.email);
-  }, [form.email]);
-
-  const isGstinValid = useMemo(() => {
-    if (!form.gstin.trim()) return true;
-    return isValidGstin(form.gstin);
-  }, [form.gstin]);
-
-  const isPanValid = useMemo(() => {
-    if (!form.pan.trim()) return true;
-    return isValidPan(form.pan);
-  }, [form.pan]);
-
-  const isIfscValid = useMemo(() => {
-    if (!form.ifscCode.trim()) return true;
-    return isValidIfsc(form.ifscCode);
-  }, [form.ifscCode]);
-
-  const isAccountNoValid = useMemo(() => {
-    if (!form.accountNo.trim()) return true;
-    const clean = form.accountNo.replace(/[^0-9]/g, "");
-    return clean.length >= 9 && clean.length <= 18;
-  }, [form.accountNo]);
-
-  const isFormValid =
-    form.name.trim().length >= 2 &&
-    isUpiValid &&
-    isPhoneValid &&
-    isEmailValid &&
-    isGstinValid &&
-    isPanValid &&
-    isIfscValid &&
-    isAccountNoValid;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // --- Save Profile & Settings ---
+  async function handleSaveSettings() {
     setLoading(true);
-    setError("");
-    setSaved(false);
-
-    setTouched({
-      name: true,
-      upiId: true,
-      phone: true,
-      email: true,
-      gstin: true,
-      pan: true,
-      ifscCode: true,
-      accountNo: true,
-    });
-
-    if (!form.name.trim()) {
-      setError("Company Trade Name is required.");
-      setLoading(false);
-      return;
-    }
-    if (!isUpiValid) {
-      setError("Please enter a valid UPI ID (e.g. 9876543210@paytm or business@okhdfcbank).");
-      setLoading(false);
-      return;
-    }
-    if (form.phone.trim() && !isPhoneValid) {
-      setError("Please enter a valid 10-digit mobile number.");
-      setLoading(false);
-      return;
-    }
-    if (form.email.trim() && !isEmailValid) {
-      setError("Please enter a valid email address (e.g. billing@mybusiness.in).");
-      setLoading(false);
-      return;
-    }
-    if (form.gstin.trim() && !isGstinValid) {
-      setError("Invalid GSTIN format (must be 15 alphanumeric characters, e.g. 24ABCDE1234F1Z5).");
-      setLoading(false);
-      return;
-    }
-    if (form.pan.trim() && !isPanValid) {
-      setError("Invalid PAN format (must be 10 characters: ABCDE1234F).");
-      setLoading(false);
-      return;
-    }
-    if (form.ifscCode.trim() && !isIfscValid) {
-      setError("Invalid Bank IFSC code (11 characters: e.g. SBIN0001234).");
-      setLoading(false);
-      return;
-    }
-    if (form.accountNo.trim() && !isAccountNoValid) {
-      setError("Bank Account Number must be between 9 and 18 digits.");
-      setLoading(false);
-      return;
-    }
-
+    setErrorMsg("");
     try {
+      const payload = {
+        ...profileForm,
+        ...bankingForm,
+        settings: settingsForm,
+      };
+
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          name: form.name.trim(),
-          upiId: form.upiId.trim(),
-          phone: form.phone.trim() || null,
-          email: form.email.trim().toLowerCase() || null,
-          gstin: form.gstin.trim().toUpperCase() || null,
-          pan: form.pan.trim().toUpperCase() || null,
-          ifscCode: form.ifscCode.trim().toUpperCase() || null,
-          accountNo: form.accountNo.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update settings");
 
-      setSaved(true);
-      setTimeout(() => setSaved(false), 4000);
+      triggerSuccess("Company profile & settings saved successfully!");
       router.refresh();
     } catch (err: any) {
-      setError(err.message);
+      setErrorMsg(err.message || "Failed to save settings");
     } finally {
       setLoading(false);
     }
   }
 
+  // --- Apply Business Template ---
+  async function handleApplyTemplate(templateType: BusinessType) {
+    setTemplateLoading(templateType);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/settings/templates/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateType }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to apply template");
+
+      setProfileForm((f) => ({
+        ...f,
+        businessType: templateType,
+        industry: data.template.industry,
+      }));
+      setSettingsForm(data.settings);
+
+      // Refresh custom fields
+      const cfRes = await fetch("/api/custom-fields");
+      const cfData = await cfRes.json();
+      if (cfData.ok) {
+        setCustomFields(cfData.customFields);
+      }
+
+      triggerSuccess(`Successfully applied '${templateType}' industry template!`);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to apply template");
+    } finally {
+      setTemplateLoading(null);
+    }
+  }
+
+  // --- Create Custom Field ---
+  async function handleCreateCustomField(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCustomField.fieldLabel.trim()) return;
+    setLoading(true);
+    try {
+      const opts = newCustomField.options
+        ? newCustomField.options.split(",").map((s) => s.trim()).filter(Boolean)
+        : null;
+
+      const res = await fetch("/api/custom-fields", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entityType: newCustomField.entityType,
+          fieldLabel: newCustomField.fieldLabel.trim(),
+          fieldType: newCustomField.fieldType,
+          isRequired: newCustomField.isRequired,
+          options: opts,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create custom field");
+
+      setCustomFields((prev) => [...prev, data.customField]);
+      setNewCustomField({
+        entityType: "PRODUCT",
+        fieldName: "",
+        fieldLabel: "",
+        fieldType: "TEXT",
+        isRequired: false,
+        options: "",
+      });
+      triggerSuccess("Custom field added successfully!");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to add custom field");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // --- Delete Custom Field ---
+  async function handleDeleteCustomField(id: string) {
+    try {
+      const res = await fetch(`/api/custom-fields?id=${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete");
+      setCustomFields((prev) => prev.filter((c) => c.id !== id));
+      triggerSuccess("Custom field removed.");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to delete custom field");
+    }
+  }
+
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-          <Settings className="h-6 w-6" />
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Company & Invoice Settings</h1>
-          <p className="text-sm text-slate-500">
-            UPI QR payments, bank details, tax settings aur invoice print layout configure karein
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            Company Settings & Configuration
+          </h1>
+          <p className="text-xs font-medium text-slate-500 mt-1">
+            Current Business Type: <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{profileForm.businessType}</span>
           </p>
         </div>
+
+        <button
+          onClick={handleSaveSettings}
+          disabled={loading}
+          className="btn-primary inline-flex items-center gap-2"
+        >
+          <Save className="h-4 w-4" />
+          {loading ? "Saving Changes..." : "Save All Settings"}
+        </button>
       </div>
 
-      {saved && (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 border border-emerald-200">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          Settings updated successfully! Dynamic UPI QR code aur bank details invoices par live ho chuki hain.
+      {savedMsg && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-xs font-bold text-emerald-800 border border-emerald-200 animate-in fade-in">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span>{savedMsg}</span>
         </div>
       )}
 
-      {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-700 border border-red-200">
-          <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
-          {error}
+      {errorMsg && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-xs font-semibold text-red-700 border border-red-200 animate-in fade-in">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* UPI & Instant QR Code Section */}
-        <div className="card p-6 bg-gradient-to-br from-emerald-50/40 to-teal-50/20 border-emerald-200/80">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-            <div className="flex-1 space-y-4">
-              <div className="flex items-center gap-2.5">
-                <QrCode className="h-6 w-6 text-emerald-600" />
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Dynamic UPI QR Code (Instant Client Payments)
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Yeh UPI ID sabhi sales invoices par scannable QR code banayegi (Google Pay, PhonePe, Paytm).
-                  </p>
-                </div>
-              </div>
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 gap-1 overflow-x-auto text-xs font-bold">
+        <button
+          type="button"
+          onClick={() => setActiveTab("profile")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "profile"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          1. Business Profile
+        </button>
 
-              <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                    UPI ID / VPA *
-                  </label>
-                  {form.upiId && (
-                    <span className={`text-[11px] font-medium ${isUpiValid ? "text-emerald-600" : "text-red-500"}`}>
-                      {isUpiValid ? "✓ Valid UPI handle" : "✕ Format: user@bank"}
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 9876543210@paytm or businessname@okhdfcbank"
-                  value={form.upiId}
-                  onChange={(e) => update("upiId", e.target.value)}
-                  onBlur={() => handleBlur("upiId")}
-                  className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${
-                    form.upiId && !isUpiValid
-                      ? "border-red-300 focus:border-red-500 focus:ring-red-500/10"
-                      : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/10"
-                  }`}
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Registered Google Pay, PhonePe, Paytm ya Bank UPI ID enter karein.
-                </p>
-              </div>
-            </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab("templates")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "templates"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Sparkles className="h-4 w-4" />
+          2. Industry Templates
+        </button>
 
-            {/* Live QR Preview */}
-            <div className="flex flex-col items-center">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                Live QR Preview
-              </p>
-              <UpiQrCode
-                upiId={isUpiValid ? form.upiId : "demo@upi"}
-                payeeName={form.name || "Business"}
-                amount={999}
-                invoiceNo="INV-SAMPLE"
-              />
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab("features")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "features"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Sliders className="h-4 w-4" />
+          3. Module Feature Flags
+        </button>
 
-        {/* Bank Account Details */}
-        <div className="card p-6 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Landmark className="h-5 w-5 text-brand-600" />
-            <h2 className="text-base font-bold text-slate-900">
-              Bank Account Details (Printed on Invoices)
-            </h2>
-          </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab("customFields")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "customFields"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Tag className="h-4 w-4" />
+          4. Custom Fields
+        </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab("banking")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "banking"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Landmark className="h-4 w-4" />
+          5. Banking & UPI QR
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("backup")}
+          className={`flex items-center gap-2 pb-3 px-3.5 border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "backup"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Download className="h-4 w-4" />
+          6. Backup & Export
+        </button>
+      </div>
+
+      {/* TAB 1: BUSINESS PROFILE */}
+      {activeTab === "profile" && (
+        <div className="card p-6 space-y-6">
+          <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+            Company Master Setup
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="label">Bank Name</label>
+              <label className="label">Business Name *</label>
               <input
-                className="input"
-                placeholder="e.g. HDFC Bank / State Bank of India"
-                value={form.bankName}
-                onChange={(e) => update("bankName", e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">Account Number (9-18 Digits)</label>
-                {form.accountNo && (
-                  <span className={`text-[11px] font-medium ${isAccountNoValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isAccountNoValid ? "✓ Valid" : "✕ 9-18 digits daalein"}
-                  </span>
-                )}
-              </div>
-              <input
-                className={`input font-mono ${form.accountNo && !isAccountNoValid ? "border-red-300 bg-red-50/20" : ""}`}
-                placeholder="e.g. 50200012345678"
-                value={form.accountNo}
-                onChange={(e) => update("accountNo", e.target.value.replace(/[^0-9]/g, ""))}
-                onBlur={() => handleBlur("accountNo")}
-              />
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">IFSC Code (11 Characters)</label>
-                {form.ifscCode && (
-                  <span className={`text-[11px] font-medium ${isIfscValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isIfscValid ? "✓ Valid IFSC" : "✕ Format: SBIN0001234"}
-                  </span>
-                )}
-              </div>
-              <input
-                maxLength={11}
-                className={`input font-mono uppercase ${form.ifscCode && !isIfscValid ? "border-red-300 bg-red-50/20" : ""}`}
-                placeholder="e.g. HDFC0001234"
-                value={form.ifscCode}
-                onChange={(e) => update("ifscCode", e.target.value.toUpperCase())}
-                onBlur={() => handleBlur("ifscCode")}
-              />
-            </div>
-
-            <div>
-              <label className="label">Branch Name</label>
-              <input
-                className="input"
-                placeholder="e.g. MG Road Branch, Ahmedabad"
-                value={form.branchName}
-                onChange={(e) => update("branchName", e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Company Profile Details */}
-        <div className="card p-6 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Building2 className="h-5 w-5 text-brand-600" />
-            <h2 className="text-base font-bold text-slate-900">
-              Business Profile & Tax Registration
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Display Trade Name *</label>
-              <input
+                type="text"
                 className="input font-semibold"
-                required
-                value={form.name}
-                onChange={(e) => update("name", e.target.value)}
-                onBlur={() => handleBlur("name")}
+                value={profileForm.name}
+                onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
               />
             </div>
 
             <div>
-              <label className="label">Legal Registered Name</label>
+              <label className="label">Legal Name</label>
               <input
+                type="text"
                 className="input"
-                placeholder="e.g. Sagar Enterprises Pvt. Ltd."
-                value={form.legalName}
-                onChange={(e) => update("legalName", e.target.value)}
+                value={profileForm.legalName}
+                onChange={(e) => setProfileForm({ ...profileForm, legalName: e.target.value })}
               />
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">GSTIN (15 Characters)</label>
-                {form.gstin && (
-                  <span className={`text-[11px] font-medium ${isGstinValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isGstinValid ? "✓ Valid GSTIN" : "✕ Format: 24ABCDE1234F1Z5"}
-                  </span>
-                )}
-              </div>
-              <input
-                maxLength={15}
-                className={`input font-mono uppercase ${form.gstin && !isGstinValid ? "border-red-300 bg-red-50/20" : ""}`}
-                placeholder="24ABCDE1234F1Z5"
-                value={form.gstin}
-                onChange={(e) => update("gstin", e.target.value.toUpperCase())}
-                onBlur={() => handleBlur("gstin")}
-              />
+              <label className="label">Business Type</label>
+              <select
+                className="input font-bold text-emerald-700"
+                value={profileForm.businessType}
+                onChange={(e) => setProfileForm({ ...profileForm, businessType: e.target.value })}
+              >
+                {Object.keys(BUSINESS_TEMPLATES).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">PAN Number (10 Characters)</label>
-                {form.pan && (
-                  <span className={`text-[11px] font-medium ${isPanValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isPanValid ? "✓ Valid PAN" : "✕ Format: ABCDE1234F"}
-                  </span>
-                )}
-              </div>
+              <label className="label">Industry Classification</label>
               <input
-                maxLength={10}
-                className={`input font-mono uppercase ${form.pan && !isPanValid ? "border-red-300 bg-red-50/20" : ""}`}
-                placeholder="ABCDE1234F"
-                value={form.pan}
-                onChange={(e) => update("pan", e.target.value.toUpperCase())}
-                onBlur={() => handleBlur("pan")}
-              />
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">Phone / Mobile (10 Digits)</label>
-                {form.phone && (
-                  <span className={`text-[11px] font-medium ${isPhoneValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isPhoneValid ? "✓ Valid phone" : "✕ 10 digits daalein"}
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <Phone className="h-4 w-4" />
-                </div>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  className={`input pl-10 ${form.phone && !isPhoneValid ? "border-red-300 bg-red-50/20" : ""}`}
-                  placeholder="9876543210"
-                  value={form.phone}
-                  onChange={(e) => update("phone", e.target.value.replace(/[^0-9]/g, ""))}
-                  onBlur={() => handleBlur("phone")}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="label mb-0">Email Address</label>
-                {form.email && (
-                  <span className={`text-[11px] font-medium ${isEmailValid ? "text-emerald-600" : "text-red-500"}`}>
-                    {isEmailValid ? "✓ Valid email" : "✕ Invalid format"}
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <input
-                  type="email"
-                  className={`input pl-10 ${form.email && !isEmailValid ? "border-red-300 bg-red-50/20" : ""}`}
-                  placeholder="billing@mybusiness.in"
-                  value={form.email}
-                  onChange={(e) => update("email", e.target.value)}
-                  onBlur={() => handleBlur("email")}
-                />
-              </div>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="label">Business Address</label>
-              <input
+                type="text"
                 className="input"
-                placeholder="Shop No. 4, Commercial Complex, Main Road"
-                value={form.address}
-                onChange={(e) => update("address", e.target.value)}
+                value={profileForm.industry}
+                onChange={(e) => setProfileForm({ ...profileForm, industry: e.target.value })}
               />
             </div>
 
             <div>
-              <label className="label">City</label>
+              <label className="label">Company Logo URL</label>
               <input
+                type="url"
+                placeholder="https://example.com/logo.png"
                 className="input"
-                placeholder="Ahmedabad"
-                value={form.city}
-                onChange={(e) => update("city", e.target.value)}
+                value={profileForm.logo}
+                onChange={(e) => setProfileForm({ ...profileForm, logo: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Website</label>
+              <input
+                type="text"
+                placeholder="www.mybusiness.com"
+                className="input"
+                value={profileForm.website}
+                onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Phone / Mobile</label>
+              <input
+                type="tel"
+                className="input"
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Email Address</label>
+              <input
+                type="email"
+                className="input"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Country</label>
+              <input
+                type="text"
+                className="input"
+                value={profileForm.country}
+                onChange={(e) => setProfileForm({ ...profileForm, country: e.target.value })}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="label">Registered Address</label>
+              <textarea
+                rows={2}
+                className="input"
+                value={profileForm.address}
+                onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
               />
             </div>
 
             <div>
               <label className="label">State</label>
               <input
+                type="text"
                 className="input"
-                placeholder="Gujarat"
-                value={form.state}
-                onChange={(e) => update("state", e.target.value)}
+                value={profileForm.state}
+                onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">City</label>
+              <input
+                type="text"
+                className="input"
+                value={profileForm.city}
+                onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Pincode</label>
+              <input
+                type="text"
+                className="input"
+                value={profileForm.pincode}
+                onChange={(e) => setProfileForm({ ...profileForm, pincode: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">GSTIN (15 Digits)</label>
+              <input
+                type="text"
+                maxLength={15}
+                className="input uppercase font-mono"
+                value={profileForm.gstin}
+                onChange={(e) => setProfileForm({ ...profileForm, gstin: e.target.value.toUpperCase() })}
+              />
+            </div>
+
+            <div>
+              <label className="label">PAN Number</label>
+              <input
+                type="text"
+                maxLength={10}
+                className="input uppercase font-mono"
+                value={profileForm.pan}
+                onChange={(e) => setProfileForm({ ...profileForm, pan: e.target.value.toUpperCase() })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Base Currency</label>
+              <select
+                className="input font-bold"
+                value={profileForm.currency}
+                onChange={(e) => setProfileForm({ ...profileForm, currency: e.target.value })}
+              >
+                <option value="INR">INR (₹ - Indian Rupee)</option>
+                <option value="USD">USD ($ - US Dollar)</option>
+                <option value="EUR">EUR (€ - Euro)</option>
+                <option value="AED">AED (د.إ - UAE Dirham)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Financial Year</label>
+              <input
+                type="text"
+                placeholder="2026-27"
+                className="input"
+                value={profileForm.financialYear}
+                onChange={(e) => setProfileForm({ ...profileForm, financialYear: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Timezone</label>
+              <input
+                type="text"
+                placeholder="Asia/Kolkata"
+                className="input"
+                value={profileForm.timezone}
+                onChange={(e) => setProfileForm({ ...profileForm, timezone: e.target.value })}
               />
             </div>
           </div>
         </div>
+      )}
 
-        {/* Terms & Conditions */}
-        <div className="card p-6 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <FileText className="h-5 w-5 text-brand-600" />
-            <h2 className="text-base font-bold text-slate-900">
-              Invoice Terms & Conditions
+      {/* TAB 2: INDUSTRY TEMPLATES (1-CLICK APPLY) */}
+      {activeTab === "templates" && (
+        <div className="space-y-4">
+          <div className="card p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+            <h2 className="text-base font-black flex items-center gap-2 text-emerald-400">
+              <Sparkles className="h-5 w-5" /> 1-Click Business Template Presets
             </h2>
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+              Applying a template automatically configures module visibility, enables required industry fields,
+              and provisions default custom fields. You can fine-tune any toggle in the Feature Flags tab.
+            </p>
           </div>
 
-          <div>
-            <textarea
-              rows={4}
-              className="w-full rounded-xl border border-slate-200 p-3 text-sm font-sans outline-none focus:border-brand-500"
-              value={form.terms}
-              onChange={(e) => update("terms", e.target.value)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.values(BUSINESS_TEMPLATES).map((tmpl) => {
+              const isActive = profileForm.businessType === tmpl.id;
+              const isApplying = templateLoading === tmpl.id;
+
+              return (
+                <div
+                  key={tmpl.id}
+                  className={`card p-5 flex flex-col justify-between transition-all border ${
+                    isActive
+                      ? "border-emerald-500 bg-emerald-50/20 shadow-md ring-2 ring-emerald-500/20"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-slate-900">{tmpl.name}</span>
+                      {isActive && (
+                        <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                          <Check className="h-3 w-3 stroke-[3]" /> Active
+                        </span>
+                      )}
+                    </div>
+                    <span className="inline-block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mb-2">
+                      {tmpl.industry}
+                    </span>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                      {tmpl.description}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      disabled={isActive || isApplying}
+                      onClick={() => handleApplyTemplate(tmpl.id)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                        isActive
+                          ? "bg-slate-100 text-slate-400 cursor-default"
+                          : "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+                      }`}
+                    >
+                      {isApplying ? "Applying Template..." : isActive ? "Currently Active" : `Apply ${tmpl.id} Setup`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        {/* Submit Button */}
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={loading || !isFormValid}
-            className="flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-brand-700 disabled:opacity-50 transition-all"
-          >
-            <Save className="h-4 w-4" />
-            {loading ? "Saving Settings..." : "Save All Settings"}
-          </button>
+      {/* TAB 3: MODULE FEATURE FLAGS */}
+      {activeTab === "features" && (
+        <div className="card p-6 space-y-6">
+          <div className="border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-900">Configurable Feature Flags</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Toggle specific business modules and system rules without modifying any React code.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                key: "inventoryEnabled",
+                title: "Inventory & Physical Stock",
+                desc: "Enable physical stock tracking, items list, and stock ledger. (Disable for service-only businesses).",
+              },
+              {
+                key: "gstEnabled",
+                title: "GST Billing & Tax Invoices",
+                desc: "Calculate CGST/SGST/IGST tax rates, HSN codes, and GSTR reporting.",
+              },
+              {
+                key: "warehouseEnabled",
+                title: "Warehouses & Godowns",
+                desc: "Track stock across physical warehouse locations.",
+              },
+              {
+                key: "multiWarehouseEnabled",
+                title: "Multi-Warehouse Transfers",
+                desc: "Allow inter-warehouse stock transfer vouchers.",
+              },
+              {
+                key: "barcodeEnabled",
+                title: "Barcode & QR Code Scanning",
+                desc: "Enable barcode lookup on billing and product masters.",
+              },
+              {
+                key: "batchEnabled",
+                title: "Batch Number Tracking",
+                desc: "Track batch numbers on pharmaceuticals and perishable inventory.",
+              },
+              {
+                key: "expiryEnabled",
+                title: "Expiry Date Tracking",
+                desc: "Record expiry dates and warn when billing near-expiry goods.",
+              },
+              {
+                key: "serialEnabled",
+                title: "Serial Number & IMEI",
+                desc: "Individual tracking for electronics and mobile devices.",
+              },
+              {
+                key: "manufacturingEnabled",
+                title: "Manufacturing & BOM",
+                desc: "Enable raw material tracking, production runs, and finished goods.",
+              },
+              {
+                key: "quotationEnabled",
+                title: "Quotations & Estimates",
+                desc: "Create pre-sales quotations before generating final invoices.",
+              },
+              {
+                key: "salesOrderEnabled",
+                title: "Sales Orders Workflow",
+                desc: "Track customer sales orders before delivery challans.",
+              },
+              {
+                key: "purchaseOrderEnabled",
+                title: "Purchase Orders (PO)",
+                desc: "Issue formal POs to vendors before receiving bills.",
+              },
+              {
+                key: "deliveryChallanEnabled",
+                title: "Delivery Challans",
+                desc: "Generate dispatch challans for goods transport before final invoice.",
+              },
+              {
+                key: "goodsReceiptEnabled",
+                title: "Goods Receipts (GRN)",
+                desc: "Record physical goods arrival and verify against Purchase Orders before billing.",
+              },
+              {
+                key: "salespersonEnabled",
+                title: "Salesperson & Executive Tracking",
+                desc: "Assign sales agents to customers and invoices for commission calculation.",
+              },
+              {
+                key: "priceListsEnabled",
+                title: "Tiered Price Lists",
+                desc: "Support wholesale, dealer, and distributor pricing levels.",
+              },
+              {
+                key: "negativeStockAllowed",
+                title: "Allow Negative Stock",
+                desc: "Allow invoices to be saved even if physical stock is below zero.",
+              },
+              {
+                key: "taxInclusivePricing",
+                title: "Tax-Inclusive Rates",
+                desc: "Prices entered on invoices default to inclusive of GST (e.g. Restaurants, Retail).",
+              },
+              {
+                key: "roundOffEnabled",
+                title: "Auto Round-Off",
+                desc: "Automatically round off final bill grand total to the nearest integer rupee.",
+              },
+            ].map((f) => {
+              const isChecked = Boolean(settingsForm[f.key as FeatureFlagKey]);
+              return (
+                <div
+                  key={f.key}
+                  className="flex items-start justify-between p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-white transition-colors"
+                >
+                  <div className="pr-4">
+                    <span className="text-xs font-bold text-slate-800">{f.title}</span>
+                    <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{f.desc}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          [f.key as FeatureFlagKey]: e.target.checked,
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </form>
+      )}
+
+      {/* TAB 4: CONFIGURABLE CUSTOM FIELDS */}
+      {activeTab === "customFields" && (
+        <div className="space-y-6">
+          <div className="card p-6 space-y-4">
+            <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+              Add New Custom Field
+            </h2>
+            <form onSubmit={handleCreateCustomField} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="label">Target Entity</label>
+                <select
+                  className="input"
+                  value={newCustomField.entityType}
+                  onChange={(e) => setNewCustomField({ ...newCustomField, entityType: e.target.value })}
+                >
+                  <option value="PRODUCT">Product / Item</option>
+                  <option value="CUSTOMER">Customer</option>
+                  <option value="SUPPLIER">Supplier / Vendor</option>
+                  <option value="INVOICE">Invoice</option>
+                  <option value="EXPENSE">Expense</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Field Label *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Doctor License or Fabric Type"
+                  className="input"
+                  value={newCustomField.fieldLabel}
+                  onChange={(e) => setNewCustomField({ ...newCustomField, fieldLabel: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">Field Type</label>
+                <select
+                  className="input"
+                  value={newCustomField.fieldType}
+                  onChange={(e) => setNewCustomField({ ...newCustomField, fieldType: e.target.value })}
+                >
+                  <option value="TEXT">Text</option>
+                  <option value="NUMBER">Number</option>
+                  <option value="DATE">Date</option>
+                  <option value="SELECT">Dropdown Select</option>
+                  <option value="BOOLEAN">Yes / No</option>
+                </select>
+              </div>
+
+              <div>
+                <button type="submit" disabled={loading} className="btn-primary w-full inline-flex items-center justify-center gap-1.5">
+                  <Plus className="h-4 w-4" /> Add Field
+                </button>
+              </div>
+
+              {newCustomField.fieldType === "SELECT" && (
+                <div className="md:col-span-4">
+                  <label className="label">Dropdown Options (Comma-separated)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Cotton, Silk, Polyester, Wool"
+                    className="input"
+                    value={newCustomField.options}
+                    onChange={(e) => setNewCustomField({ ...newCustomField, options: e.target.value })}
+                  />
+                </div>
+              )}
+            </form>
+          </div>
+
+          <div className="card p-6 space-y-4">
+            <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+              Existing Custom Fields ({customFields.length})
+            </h2>
+
+            {customFields.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">
+                No custom fields defined yet. Add one above or apply an Industry Template.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {customFields.map((cf) => (
+                  <div key={cf.id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-slate-800">{cf.fieldLabel}</span>
+                      <span className="text-slate-400 font-mono text-[10px] ml-2">({cf.fieldName})</span>
+                      <div className="flex gap-2 mt-0.5">
+                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                          {cf.entityType}
+                        </span>
+                        <span className="bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                          {cf.fieldType}
+                        </span>
+                        {cf.isRequired && (
+                          <span className="bg-red-50 text-red-700 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                            Required
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCustomField(cf.id)}
+                      className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50"
+                      title="Delete Custom Field"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: BANKING & UPI */}
+      {activeTab === "banking" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 card p-6 space-y-4">
+            <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+              Banking & Payment Settlement
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">UPI ID (VPA) *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. business@okaxis"
+                  className="input font-mono"
+                  value={bankingForm.upiId}
+                  onChange={(e) => setBankingForm({ ...bankingForm, upiId: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">Bank Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={bankingForm.bankName}
+                  onChange={(e) => setBankingForm({ ...bankingForm, bankName: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">Account Number</label>
+                <input
+                  type="text"
+                  className="input font-mono"
+                  value={bankingForm.accountNo}
+                  onChange={(e) => setBankingForm({ ...bankingForm, accountNo: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">IFSC Code</label>
+                <input
+                  type="text"
+                  className="input uppercase font-mono"
+                  value={bankingForm.ifscCode}
+                  onChange={(e) => setBankingForm({ ...bankingForm, ifscCode: e.target.value.toUpperCase() })}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="label">Branch Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={bankingForm.branchName}
+                  onChange={(e) => setBankingForm({ ...bankingForm, branchName: e.target.value })}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="label">Invoice Terms & Conditions</label>
+                <textarea
+                  rows={4}
+                  className="input font-mono text-xs"
+                  value={bankingForm.terms}
+                  onChange={(e) => setBankingForm({ ...bankingForm, terms: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-6 flex flex-col items-center justify-center text-center">
+            <h3 className="text-xs font-bold text-slate-800 mb-2">Live UPI QR Code Preview</h3>
+            <p className="text-[11px] text-slate-500 mb-4">Printed dynamically on sales invoices</p>
+            <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200">
+              <UpiQrCode upiId={bankingForm.upiId || "taily@upi"} payeeName={profileForm.name || "Business"} amount={100} invoiceNo="PREVIEW-001" />
+            </div>
+            <p className="text-[11px] font-mono font-bold text-slate-700 mt-3">{bankingForm.upiId}</p>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: BACKUP & DATA */}
+      {activeTab === "backup" && (
+        <div className="card p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+            Data Portability & Full Exports
+          </h2>
+          <p className="text-xs text-slate-600">
+            Export all double-entry ledger data, invoices, items, and parties into industry standard formats.
+          </p>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <a
+              href="/api/backup?format=json"
+              target="_blank"
+              download
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" /> Download JSON Backup
+            </a>
+            <a
+              href="/api/backup?format=csv"
+              target="_blank"
+              download
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> Export Excel / CSV Sheets
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

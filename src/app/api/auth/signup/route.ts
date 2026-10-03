@@ -104,10 +104,13 @@ export async function POST(req: Request) {
         },
       });
 
+      const { applyBusinessTemplate } = await import("@/lib/featureFlags");
+
       const company = await tx.company.create({
         data: {
           name: trimmedCompany,
           legalName: trimmedCompany,
+          businessType: "Retail",
           email: cleanEmail,
           phone: cleanPhone || null,
           city: city?.trim() || null,
@@ -119,7 +122,7 @@ export async function POST(req: Request) {
       });
 
       await tx.companyMember.create({
-        data: { userId: user.id, companyId: company.id, role: "ADMIN" },
+        data: { userId: user.id, companyId: company.id, role: "COMPANY_ADMIN" },
       });
 
       // Seed default chart of accounts
@@ -132,6 +135,8 @@ export async function POST(req: Request) {
           groupId: a.groupId,
         })),
       });
+
+      await applyBusinessTemplate(company.id, "Retail", tx);
 
       return { user, company };
     });
@@ -155,10 +160,10 @@ export async function POST(req: Request) {
       ok: true,
       pendingApproval: true,
       message:
-        "Aapka registration safalta-purvak ho gaya hai! Super Admin ke approve karne ke baad aap login kar sakenge.",
+        "Your registration was successful! You will be able to log in once Super Admin approves your account.",
     });
   } catch (err: any) {
     console.error("Signup error:", err);
-    return NextResponse.json({ error: err.message || "Signup failed. Kripya dobara try karein." }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Signup failed. Please try again." }, { status: 500 });
   }
 }

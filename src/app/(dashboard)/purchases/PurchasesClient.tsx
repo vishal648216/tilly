@@ -193,7 +193,7 @@ export default function PurchasesClient({
                   <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     <ShoppingCart className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                     <p className="text-base font-medium text-slate-600">No purchase bills found</p>
-                    <p className="text-xs">Click "Add Purchase Bill" to record stock purchases.</p>
+                    <p className="text-xs">Click &quot;Add Purchase Bill&quot; to record stock purchases.</p>
                   </td>
                 </tr>
               ) : (
@@ -236,9 +236,17 @@ export default function PurchasesClient({
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                             pur.status === "PAID"
                               ? "bg-emerald-100 text-emerald-800"
-                              : pur.status === "PARTIAL"
+                              : pur.status === "PARTIALLY_PAID" || pur.status === "PARTIAL"
                               ? "bg-amber-100 text-amber-800"
-                              : "bg-red-100 text-red-800"
+                              : pur.status === "DRAFT"
+                              ? "bg-slate-100 text-slate-700"
+                              : pur.status === "OVERDUE"
+                              ? "bg-red-100 text-red-800"
+                              : pur.status === "CANCELLED"
+                              ? "bg-rose-100 text-rose-800 line-through"
+                              : pur.status === "REVERSED"
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-blue-100 text-blue-800"
                           }`}
                         >
                           {pur.status}

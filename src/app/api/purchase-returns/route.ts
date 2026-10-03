@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getCurrentCompany } from "@/lib/session";
+import { requirePermission, validateEntityBelongsToCompany, handleAuthError } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { Decimal } from "@prisma/client/runtime/library";
 import { roundTo2 } from "@/lib/currency";
+import { recordAuditLog, getClientMetadata } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company" }, { status: 400 });
+    const context = await requirePermission(PERMISSIONS.PURCHASE_VIEW, req);
 
     const returns = await prisma.invoice.findMany({
-      where: { companyId: company.id, type: "PURCHASE_RETURN" },
+      where: { companyId: context.company.id, type: "PURCHASE_RETURN" },
       include: {
         party: true,
         lines: { include: { item: true } },
@@ -23,22 +22,21 @@ export async function GET() {
       orderBy: { date: "desc" },
     });
 
-    return NextResponse.json({ returns });
+    return NextResponse.json({ ok: true, returns });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
+    const context = await requirePermission(PERMISSIONS.PURCHASE_RETURN, req);
+    const companyId = context.company.id;
 
     const body = await req.json();
     const {
       partyId,
+      originalInvoiceId,
       originalInvoiceNo,
       date,
       reason,
@@ -55,17 +53,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "At least one return item is required." }, { status: 400 });
     }
 
-    const returnDate = date ? new Date(date) : new Date();
+    // IDOR Check: Ensure vendor belongs to company
+    await validateEntityBelongsToCompany("party", partyId, companyId, req, {
+      userId: context.user.id,
+      userEmail: context.user.email,
+    });
 
-    // Verify Vendor belongs to company
-    const party = await prisma.party.findFirst({
-      where: { id: partyId, companyId: company.id },
+    const party = await prisma.party.findUnique({
+      where: { id: partyId },
     });
     if (!party) {
-      return NextResponse.json({ error: "Selected vendor not found." }, { status: 400 });
+      return NextResponse.json({ error: "Selected vendor not found." }, { status: 404 });
     }
 
-    // 1. Calculate Subtotal, GST, RoundOff, Grand Total
+    // Lookup original purchase invoice if provided
+    let originalInvoice: any = null;
+    if (originalInvoiceId) {
+      originalInvoice = await prisma.invoice.findFirst({
+        where: { id: originalInvoiceId, companyId },
+        include: { lines: true },
+      });
+    } else if (originalInvoiceNo && String(originalInvoiceNo).trim()) {
+      originalInvoice = await prisma.invoice.findFirst({
+        where: { companyId, invoiceNo: String(originalInvoiceNo).trim() },
+        include: { lines: true },
+      });
+    }
+
+    const returnDate = date ? new Date(date) : new Date();
+
+    // 1. Calculate Subtotal, GST, RoundOff, Grand Total & Validate Limits
     let subTotal = 0;
     let cgstTotal = 0;
     let sgstTotal = 0;
@@ -73,6 +90,7 @@ export async function POST(req: Request) {
 
     const validatedLines: Array<{
       itemId?: string;
+      originalLineId?: string;
       name: string;
       hsn?: string;
       qty: number;
@@ -92,6 +110,43 @@ export async function POST(req: Request) {
 
       if (!name || isNaN(qty) || qty <= 0 || isNaN(rate) || rate < 0) {
         continue;
+      }
+
+      if (l.itemId) {
+        // IDOR Check
+        await validateEntityBelongsToCompany("item", l.itemId, companyId, req, {
+          userId: context.user.id,
+          userEmail: context.user.email,
+        });
+      }
+
+      // Check return quantity against original line if original invoice exists
+      let matchedOriginalLine: any = null;
+      if (originalInvoice && originalInvoice.lines) {
+        if (l.originalLineId) {
+          matchedOriginalLine = originalInvoice.lines.find((ol: any) => ol.id === l.originalLineId);
+        } else {
+          matchedOriginalLine = originalInvoice.lines.find(
+            (ol: any) =>
+              (l.itemId && ol.itemId === l.itemId) ||
+              ol.name.trim().toLowerCase() === name.toLowerCase()
+          );
+        }
+
+        if (matchedOriginalLine) {
+          const purchasedQty = Number(matchedOriginalLine.qty);
+          const alreadyReturned = Number(matchedOriginalLine.returnedQty || 0);
+          const availableReturnable = Math.max(0, roundTo2(purchasedQty - alreadyReturned));
+
+          if (qty > availableReturnable + 0.001) {
+            return NextResponse.json(
+              {
+                error: `Return quantity (${qty}) exceeds returnable quantity (${availableReturnable}) for "${name}". (Purchased: ${purchasedQty}, Already returned: ${alreadyReturned})`,
+              },
+              { status: 400 }
+            );
+          }
+        }
       }
 
       const lineAmt = roundTo2(qty * rate);
@@ -115,6 +170,7 @@ export async function POST(req: Request) {
 
       validatedLines.push({
         itemId: l.itemId || undefined,
+        originalLineId: matchedOriginalLine?.id || l.originalLineId || undefined,
         name,
         hsn: l.hsn ? String(l.hsn).trim() : undefined,
         qty,
@@ -138,24 +194,23 @@ export async function POST(req: Request) {
     // 2. Generate Next Debit Note Number (DN-YYYY-0001)
     const currentYear = returnDate.getFullYear();
     const count = await prisma.invoice.count({
-      where: { companyId: company.id, type: "PURCHASE_RETURN" },
+      where: { companyId, type: "PURCHASE_RETURN" },
     });
     const debitNoteNo = `DN-${currentYear}-${String(count + 1).padStart(4, "0")}`;
 
     // 3. Resolve Chart of Accounts for Double Entry
-    // Cr. Purchase Return Account (5002 or 5001)
     let purchaseReturnAcc = await prisma.account.findFirst({
-      where: { companyId: company.id, code: "5002" },
+      where: { companyId, code: "5002" },
     });
     if (!purchaseReturnAcc) {
       purchaseReturnAcc = await prisma.account.findFirst({
-        where: { companyId: company.id, code: "5001" },
+        where: { companyId, code: "5001" },
       });
     }
     if (!purchaseReturnAcc) {
       purchaseReturnAcc = await prisma.account.create({
         data: {
-          companyId: company.id,
+          companyId,
           code: "5002",
           name: "Purchase Return",
           type: "EXPENSE",
@@ -164,51 +219,46 @@ export async function POST(req: Request) {
       });
     }
 
-    // Cr. Input GST Reversal Accounts
     const [cgstAcc, sgstAcc, igstAcc, creditorAcc, roundOffAcc] = await Promise.all([
-      prisma.account.findFirst({ where: { companyId: company.id, code: "1300" } }),
-      prisma.account.findFirst({ where: { companyId: company.id, code: "1301" } }),
-      prisma.account.findFirst({ where: { companyId: company.id, code: "1302" } }),
-      prisma.account.findFirst({ where: { companyId: company.id, code: "2001" } }),
-      prisma.account.findFirst({ where: { companyId: company.id, code: "4900" } }),
+      prisma.account.findFirst({ where: { companyId, code: "1300" } }),
+      prisma.account.findFirst({ where: { companyId, code: "1301" } }),
+      prisma.account.findFirst({ where: { companyId, code: "1302" } }),
+      prisma.account.findFirst({ where: { companyId, code: "2001" } }),
+      prisma.account.findFirst({ where: { companyId, code: "4900" } }),
     ]);
 
-    // 4. Save Purchase Return + Deduct Inventory + Post Balanced Journal Voucher
+    // 4. Save Purchase Return + Deduct Inventory + Stock Movements + Post Balanced Voucher
     const debitNote = await prisma.$transaction(async (tx) => {
-      // Deduct physical item inventory (stock reduction since goods are sent back to vendor)
+      // Deduct physical item inventory (stock reduction)
       for (const line of validatedLines) {
-        let matchedId = line.itemId;
-        if (!matchedId) {
-          const companyItems = await tx.item.findMany({ where: { companyId: company.id } });
-          const match = companyItems.find(
-            (i) => i.name.trim().toLowerCase() === line.name.trim().toLowerCase()
-          );
-          if (match) matchedId = match.id;
-        }
-
-        if (matchedId) {
-          await tx.item.update({
-            where: { id: matchedId },
-            data: {
-              stock: {
-                decrement: line.qty,
-              },
+        if (line.itemId) {
+          const { recordStockMovement } = await import("@/lib/inventory");
+          await recordStockMovement(
+            {
+              companyId,
+              itemId: line.itemId,
+              movementType: "PURCHASE_RETURN",
+              referenceType: "PURCHASE",
+              referenceId: debitNoteNo,
+              qtyIn: 0,
+              qtyOut: line.qty,
+              unitCost: line.rate,
+              totalCost: line.amount,
+              date: returnDate,
+              notes: `Vendor return out via Debit Note ${debitNoteNo} (${reason || "Goods Returned"})`,
+              createdBy: context.user.id,
+              allowNegative: true,
             },
-          });
-          line.itemId = matchedId;
+            tx
+          );
         }
       }
 
-      // Generate unique voucher number
       const datePrefix = returnDate.toISOString().slice(0, 10).replace(/-/g, "");
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const vCount = await tx.voucher.count({ where: { companyId: company.id } });
+      const vCount = await tx.voucher.count({ where: { companyId } });
       const voucherNo = `V-DN-${datePrefix}-${String(vCount + 1).padStart(4, "0")}-${randomSuffix}`;
 
-      // Build balanced double-entry voucher
-      // Dr. Sundry Creditors (2001) for grandTotal (reducing accounts payable to vendor)
-      // Cr. Purchase Return (5002) for subTotal
-      // Cr. Input Tax Reversal (1300, 1301, 1302)
       const voucherEntries: Array<{ accountId: string; debit: Decimal; credit: Decimal }> = [];
 
       if (creditorAcc) {
@@ -220,7 +270,7 @@ export async function POST(req: Request) {
       }
 
       voucherEntries.push({
-        accountId: purchaseReturnAcc.id,
+        accountId: purchaseReturnAcc!.id,
         debit: new Decimal(0),
         credit: new Decimal(subTotal),
       });
@@ -265,42 +315,52 @@ export async function POST(req: Request) {
         }
       }
 
-      // Create Voucher
       const voucher = await tx.voucher.create({
         data: {
-          companyId: company.id,
+          companyId,
           voucherNo,
           type: "PURCHASE",
           date: returnDate,
           partyId,
-          narration: `Debit Note ${debitNoteNo} for Vendor Return${originalInvoiceNo ? ` against Bill ${originalInvoiceNo}` : ""}${reason ? ` (${reason})` : ""}`,
+          narration: `Debit Note ${debitNoteNo} for Vendor Return`,
           entries: {
             create: voucherEntries,
           },
         },
       });
 
-      // Create Invoice record with type PURCHASE_RETURN
+      // Atomically increment returnedQty on original purchase lines
+      for (const line of validatedLines) {
+        if (line.originalLineId) {
+          await tx.invoiceLine.update({
+            where: { id: line.originalLineId },
+            data: { returnedQty: { increment: line.qty } },
+          });
+        }
+      }
+
       const inv = await tx.invoice.create({
         data: {
-          companyId: company.id,
+          companyId,
           invoiceNo: debitNoteNo,
           type: "PURCHASE_RETURN",
           partyId,
           date: returnDate,
+          originalInvoiceId: originalInvoice?.id || null,
           subTotal: new Decimal(subTotal),
           cgstTotal: new Decimal(cgstTotal),
           sgstTotal: new Decimal(sgstTotal),
           igstTotal: new Decimal(igstTotal),
           roundOff: new Decimal(roundOff),
           grandTotal: new Decimal(grandTotal),
-          paidAmount: new Decimal(grandTotal), // Settled against credit
+          paidAmount: new Decimal(grandTotal),
           status: "PAID",
           notes: notes ? `${notes}${reason ? ` | Reason: ${reason}` : ""}` : (reason ? `Reason: ${reason}` : null),
           voucherId: voucher.id,
           lines: {
             create: validatedLines.map((l) => ({
               itemId: l.itemId,
+              originalLineId: l.originalLineId || null,
               name: l.name,
               hsn: l.hsn,
               qty: new Decimal(l.qty),
@@ -323,9 +383,22 @@ export async function POST(req: Request) {
       return inv;
     });
 
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "CREATE_PURCHASE_RETURN",
+      entity: "Invoice",
+      entityId: debitNote.id,
+      afterValue: { invoiceNo: debitNote.invoiceNo, grandTotal: debitNote.grandTotal },
+      details: `Created purchase return debit note ${debitNote.invoiceNo}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
     return NextResponse.json({ ok: true, return: debitNote });
   } catch (err: any) {
-    console.error("Purchase return creation error:", err);
-    return NextResponse.json({ error: err.message || "Failed to create debit note" }, { status: 500 });
+    return handleAuthError(err);
   }
 }

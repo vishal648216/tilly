@@ -89,7 +89,7 @@ export default async function AccountLedgerPage({
           <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
             <Layers className="h-6 w-6" />
           </div>
-          <p className="text-slate-600 font-medium">Upar se account select karein.</p>
+          <p className="text-slate-600 font-medium">Please select an account from above.</p>
         </div>
       ) : transactions.length === 0 ? (
         <div className="card p-12 text-center">
@@ -97,7 +97,7 @@ export default async function AccountLedgerPage({
             <BookOpen className="h-6 w-6" />
           </div>
           <p className="text-slate-600 font-medium">
-            "{selectedAccount?.name}" me koi transaction nahi hai.
+            No transactions found for &quot;{selectedAccount?.name}&quot;.
           </p>
         </div>
       ) : (

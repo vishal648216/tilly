@@ -198,7 +198,7 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
               Tenant Data Isolation
             </div>
             <p className="text-xs text-slate-400 mt-2">
-              Every business tenant operates in isolated workspace scope (`companyId`). Regular business users can only view and modify their own business's invoices, items, parties, and expenses.
+              Every business tenant operates in isolated workspace scope (`companyId`). Regular business users can only view and modify their own business&apos;s invoices, items, parties, and expenses.
             </p>
           </div>
         </div>

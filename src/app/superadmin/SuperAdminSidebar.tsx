@@ -18,6 +18,8 @@ import {
   X,
   ExternalLink,
   Crown,
+  Layers,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function SuperAdminSidebar({
@@ -59,6 +61,11 @@ export default function SuperAdminSidebar({
       icon: Building2,
     },
     {
+      href: "/superadmin/plans",
+      label: "Plans & Features",
+      icon: Layers,
+    },
+    {
       href: "/superadmin/invoices",
       label: "Global Invoices",
       icon: FileText,
@@ -69,8 +76,13 @@ export default function SuperAdminSidebar({
       icon: Users,
     },
     {
+      href: "/superadmin/audit",
+      label: "Platform Audit",
+      icon: ShieldCheck,
+    },
+    {
       href: "/superadmin/activity",
-      label: "Live Audit Trail",
+      label: "Live Activity",
       icon: Activity,
     },
     {

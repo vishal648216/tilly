@@ -11,6 +11,9 @@ export default async function SuperAdminCompaniesPage() {
 
   const companies = await prisma.company.findMany({
     include: {
+      subscription: {
+        include: { plan: true },
+      },
       members: {
         include: {
           user: { select: { id: true, name: true, email: true, phone: true, status: true, role: true } },
@@ -25,6 +28,12 @@ export default async function SuperAdminCompaniesPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const availablePlans = await prisma.plan.findMany({
+    where: { isActive: true },
+    select: { id: true, code: true, name: true, price: true },
+    orderBy: { price: "asc" },
+  });
+
   const enriched = companies.map((c) => {
     const salesInvoices = c.invoices.filter((i) => i.type === "SALES");
     const totalTurnover = salesInvoices.reduce(
@@ -35,6 +44,11 @@ export default async function SuperAdminCompaniesPage() {
       id: c.id,
       name: c.name,
       legalName: c.legalName,
+      status: c.status || "ACTIVE",
+      suspendedReason: c.suspendedReason,
+      planName: c.subscription?.plan?.name || "Trial",
+      planCode: c.subscription?.plan?.code || "TRIAL",
+      subscriptionStatus: c.subscription?.status || "TRIAL",
       email: c.email,
       phone: c.phone,
       city: c.city,
@@ -61,5 +75,5 @@ export default async function SuperAdminCompaniesPage() {
     };
   });
 
-  return <CompaniesClient initialCompanies={enriched} />;
+  return <CompaniesClient initialCompanies={enriched} availablePlans={availablePlans} />;
 }

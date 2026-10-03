@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getCurrentCompany } from "@/lib/session";
+import { requireCompanyAccess, requirePermission, handleAuthError } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   isValidEmail,
@@ -9,45 +10,68 @@ import {
   isValidIfsc,
   isValidUpi,
 } from "@/lib/validators";
+import { recordAuditLog, getClientMetadata } from "@/lib/audit";
+import { getCompanySettings, FeatureFlagKey } from "@/lib/featureFlags";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "Company not found" }, { status: 400 });
+    const context = await requireCompanyAccess(req);
+    const companyId = context.company.id;
 
-    return NextResponse.json({ company });
+    const [company, settings, customFields] = await Promise.all([
+      prisma.company.findUnique({
+        where: { id: companyId },
+      }),
+      getCompanySettings(companyId),
+      prisma.customFieldDefinition.findMany({
+        where: { companyId, isActive: true },
+        orderBy: [{ entityType: "asc" }, { displayOrder: "asc" }],
+      }),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      company,
+      settings,
+      customFields,
+    });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "Company not found" }, { status: 400 });
-
+    const context = await requirePermission(PERMISSIONS.SETTINGS_MANAGE, req);
+    const company = context.company;
     const body = await req.json();
+
     const {
       name,
       legalName,
+      businessType,
+      industry,
+      logo,
+      website,
       email,
       phone,
       address,
       city,
       state,
+      country,
       pincode,
       gstin,
       pan,
+      currency,
+      financialYear,
+      timezone,
       upiId,
       bankName,
       accountNo,
       ifscCode,
       branchName,
       terms,
+      settings, // Feature flags object
     } = body;
 
     const cleanName = name?.trim();
@@ -79,19 +103,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Please enter a valid UPI ID (e.g. 9876543210@paytm or name@okhdfcbank)." }, { status: 400 });
     }
 
-    const updated = await prisma.company.update({
+    // Update Company Profile
+    const updatedCompany = await prisma.company.update({
       where: { id: company.id },
       data: {
         name: cleanName,
         legalName: legalName ? legalName.trim() : null,
+        businessType: businessType || "Retail",
+        industry: industry ? industry.trim() : null,
+        logo: logo || null,
+        website: website ? website.trim() : null,
         email: email ? email.trim().toLowerCase() : null,
         phone: phone ? phone.trim() : null,
         address: address ? address.trim() : null,
         city: city ? city.trim() : null,
         state: state ? state.trim() : null,
+        country: country ? country.trim() : "India",
         pincode: pincode ? pincode.trim() : null,
         gstin: gstin ? gstin.trim().toUpperCase() : null,
         pan: pan ? pan.trim().toUpperCase() : null,
+        currency: currency ? currency.trim().toUpperCase() : "INR",
+        financialYear: financialYear ? financialYear.trim() : null,
+        timezone: timezone ? timezone.trim() : "Asia/Kolkata",
         upiId: upiId ? upiId.trim() : null,
         bankName: bankName ? bankName.trim() : null,
         accountNo: accountNo ? accountNo.trim() : null,
@@ -101,8 +134,70 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, company: updated });
+    // Update CompanySettings (Feature Flags) if provided
+    let updatedSettings = null;
+    if (settings && typeof settings === "object") {
+      const allowedFlags: FeatureFlagKey[] = [
+        "inventoryEnabled",
+        "gstEnabled",
+        "warehouseEnabled",
+        "multiWarehouseEnabled",
+        "barcodeEnabled",
+        "batchEnabled",
+        "expiryEnabled",
+        "serialEnabled",
+        "manufacturingEnabled",
+        "quotationEnabled",
+        "salesOrderEnabled",
+        "purchaseOrderEnabled",
+        "deliveryChallanEnabled",
+        "goodsReceiptEnabled",
+        "salespersonEnabled",
+        "priceListsEnabled",
+        "negativeStockAllowed",
+        "taxInclusivePricing",
+        "roundOffEnabled",
+      ];
+
+      const settingsData: Record<string, boolean> = {};
+      for (const flag of allowedFlags) {
+        if (typeof settings[flag] === "boolean") {
+          settingsData[flag] = settings[flag];
+        }
+      }
+
+      updatedSettings = await prisma.companySettings.upsert({
+        where: { companyId: company.id },
+        create: {
+          companyId: company.id,
+          ...settingsData,
+        },
+        update: {
+          ...settingsData,
+        },
+      });
+    }
+
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId: company.id,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "UPDATE_SETTINGS",
+      entity: "Company",
+      entityId: company.id,
+      details: `Updated company profile & feature settings for ${updatedCompany.name}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      success: true,
+      company: updatedCompany,
+      settings: updatedSettings,
+    });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Failed to update settings" }, { status: 500 });
+    return handleAuthError(err);
   }
 }

@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, legalName, email, phone, city, state, gstin, pan, ownerName, ownerEmail, ownerPassword } = body;
+    const { name, legalName, businessType, email, phone, city, state, gstin, pan, ownerName, ownerEmail, ownerPassword } = body;
 
     if (!name || !ownerEmail || !ownerPassword) {
       return NextResponse.json({ error: "Company name, Owner email, and Password are required" }, { status: 400 });
@@ -97,11 +97,15 @@ export async function POST(req: Request) {
       });
     }
 
+    const { applyBusinessTemplate } = await import("@/lib/featureFlags");
+    const bType = businessType || "Retail";
+
     const company = await prisma.$transaction(async (tx) => {
       const comp = await tx.company.create({
         data: {
           name: name.trim(),
           legalName: legalName?.trim() || name.trim(),
+          businessType: bType,
           email: email?.trim().toLowerCase() || cleanEmail,
           phone: phone?.trim() || null,
           city: city?.trim() || null,
@@ -114,7 +118,7 @@ export async function POST(req: Request) {
       });
 
       await tx.companyMember.create({
-        data: { userId: owner!.id, companyId: comp.id, role: "ADMIN" },
+        data: { userId: owner!.id, companyId: comp.id, role: "COMPANY_ADMIN" },
       });
 
       // Seed chart of accounts
@@ -127,6 +131,8 @@ export async function POST(req: Request) {
           groupId: a.groupId,
         })),
       });
+
+      await applyBusinessTemplate(comp.id, bType, tx);
 
       return comp;
     });

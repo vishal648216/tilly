@@ -23,11 +23,13 @@ export default async function Gstr3bPage({
   toDate.setDate(toDate.getDate() + 1);
 
   // === SALES (output tax) ===
+  // GSTR-3B: Only include POSTED/PAID invoices. Exclude DRAFT, CANCELLED, REVERSED.
   const salesInvoices = await prisma.invoice.findMany({
     where: {
       companyId: company.id,
       type: "SALES",
       date: { gte: fromDate, lt: toDate },
+      status: { notIn: ["DRAFT", "CANCELLED", "REVERSED"] },
     },
     include: { party: true, lines: true },
     orderBy: { date: "asc" },
@@ -68,12 +70,14 @@ export default async function Gstr3bPage({
     .map(([rate, data]) => ({ rate: parseFloat(rate), ...data }))
     .sort((a, b) => a.rate - b.rate);
 
-  // === PURCHASE (input tax) ===
+  // === PURCHASE (input tax credit) ===
+  // Only include POSTED/PAID purchases. CANCELLED purchases don't generate ITC.
   const purchaseInvoices = await prisma.invoice.findMany({
     where: {
       companyId: company.id,
       type: "PURCHASE",
       date: { gte: fromDate, lt: toDate },
+      status: { notIn: ["DRAFT", "CANCELLED", "REVERSED"] },
     },
     select: { subTotal: true, cgstTotal: true, sgstTotal: true, igstTotal: true, grandTotal: true },
   });

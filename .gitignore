@@ -9,11 +9,16 @@ out/
 build
 dist
 
-# database
+# database & backups
 *.db
 *.db-journal
+*.sql
+*.dump
 prisma/dev.db
 prisma/*.db
+taily_*.db
+taily_*.sql
+taily_*.zip
 
 # env files (keep secrets safe)
 .env
@@ -41,4 +46,7 @@ next-env.d.ts
 # zip archives & temporary files
 *.zip
 cookies2.txt
+*.cookie
+*.session
+backups/
 New folder/

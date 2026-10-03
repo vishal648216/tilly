@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getCurrentCompany } from "@/lib/session";
+import { requirePermission, validateEntityBelongsToCompany, handleAuthError } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { Decimal } from "@prisma/client/runtime/library";
+import { recordAuditLog, getClientMetadata } from "@/lib/audit";
+import { checkCompanyStatus } from "@/lib/subscriptionEnforcement";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
+    const context = await requirePermission(PERMISSIONS.EXPENSE_VIEW, req);
 
     const expenses = await prisma.expense.findMany({
-      where: { companyId: company.id },
+      where: { companyId: context.company.id },
       include: {
         account: true,
         voucher: {
@@ -27,18 +27,19 @@ export async function GET() {
       orderBy: { expenseDate: "desc" },
     });
 
-    return NextResponse.json({ expenses });
+    return NextResponse.json({ ok: true, expenses });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
+    const context = await requirePermission(PERMISSIONS.EXPENSE_CREATE, req);
+    const companyId = context.company.id;
+
+    // Phase 8: Block expense creation if company is SUSPENDED or EXPIRED
+    await checkCompanyStatus(companyId);
 
     const body = await req.json();
     const { category, amount, paymentMode, accountId, paidFromId, expenseDate, notes } = body;
@@ -50,22 +51,25 @@ export async function POST(req: Request) {
 
     const date = expenseDate ? new Date(expenseDate) : new Date();
 
-    // 1. Resolve Expense Account
+    // 1. Resolve Expense Account (IDOR verification if provided)
     let expenseAcc = null;
     if (accountId) {
       expenseAcc = await prisma.account.findFirst({
-        where: { id: accountId, companyId: company.id },
+        where: { id: accountId, companyId },
       });
+      if (!expenseAcc) {
+        return NextResponse.json({ error: "Selected expense account does not belong to active company." }, { status: 400 });
+      }
     }
     if (!expenseAcc) {
       expenseAcc = await prisma.account.findFirst({
-        where: { companyId: company.id, type: "EXPENSE" },
+        where: { companyId, type: "EXPENSE" },
       });
     }
     if (!expenseAcc) {
       expenseAcc = await prisma.account.create({
         data: {
-          companyId: company.id,
+          companyId,
           code: "5999",
           name: category?.trim() || "General Expenses",
           type: "EXPENSE",
@@ -74,17 +78,20 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Resolve Payment Account (Cash / Bank)
+    // 2. Resolve Payment Account (Cash / Bank, IDOR verification if provided)
     let paymentAcc = null;
     if (paidFromId) {
       paymentAcc = await prisma.account.findFirst({
-        where: { id: paidFromId, companyId: company.id },
+        where: { id: paidFromId, companyId },
       });
+      if (!paymentAcc) {
+        return NextResponse.json({ error: "Selected payment account does not belong to active company." }, { status: 400 });
+      }
     }
     if (!paymentAcc) {
       paymentAcc = await prisma.account.findFirst({
         where: {
-          companyId: company.id,
+          companyId,
           type: "ASSET",
           code: { in: ["1001", "1002", "1003"] },
         },
@@ -92,13 +99,13 @@ export async function POST(req: Request) {
     }
     if (!paymentAcc) {
       paymentAcc = await prisma.account.findFirst({
-        where: { companyId: company.id, type: "ASSET" },
+        where: { companyId, type: "ASSET" },
       });
     }
     if (!paymentAcc) {
       paymentAcc = await prisma.account.create({
         data: {
-          companyId: company.id,
+          companyId,
           code: "1001",
           name: "Cash in Hand",
           type: "ASSET",
@@ -108,18 +115,15 @@ export async function POST(req: Request) {
     }
 
     // 3. Generate guaranteed unique Voucher Number
-    const count = await prisma.voucher.count({ where: { companyId: company.id } });
+    const count = await prisma.voucher.count({ where: { companyId } });
     const datePrefix = date.toISOString().slice(0, 10).replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const voucherNo = `EXP-${datePrefix}-${String(count + 1).padStart(4, "0")}-${randomSuffix}`;
 
     const expenseRecord = await prisma.$transaction(async (tx) => {
-      // Create double entry payment voucher:
-      // Dr. Expense Account
-      // Cr. Payment Source (Cash / Bank)
       const voucher = await tx.voucher.create({
         data: {
-          companyId: company.id,
+          companyId,
           voucherNo,
           type: "PAYMENT",
           date,
@@ -143,7 +147,7 @@ export async function POST(req: Request) {
 
       const expense = await tx.expense.create({
         data: {
-          companyId: company.id,
+          companyId,
           expenseDate: date,
           category: category?.trim() || expenseAcc.name,
           amount: new Decimal(numAmount),
@@ -162,19 +166,30 @@ export async function POST(req: Request) {
       return expense;
     });
 
-    return NextResponse.json({ success: true, expense: expenseRecord });
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "CREATE_EXPENSE",
+      entity: "Expense",
+      entityId: expenseRecord.id,
+      afterValue: { amount: numAmount, category: expenseRecord.category },
+      details: `Created expense of ₹${numAmount} for ${expenseRecord.category}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return NextResponse.json({ ok: true, success: true, expense: expenseRecord });
   } catch (err: any) {
-    console.error("Expense creation error:", err);
-    return NextResponse.json({ error: err.message || "Failed to record expense" }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function DELETE(req: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const company = await getCurrentCompany();
-    if (!company) return NextResponse.json({ error: "No company selected" }, { status: 400 });
+    const context = await requirePermission(PERMISSIONS.EXPENSE_CREATE, req);
+    const companyId = context.company.id;
 
     const { searchParams } = new URL(req.url);
     let id = searchParams.get("id");
@@ -183,17 +198,21 @@ export async function DELETE(req: Request) {
       try {
         const body = await req.json();
         id = body?.id;
-      } catch {
-        // body may be empty
-      }
+      } catch {}
     }
 
     if (!id) {
       return NextResponse.json({ error: "Expense ID is required" }, { status: 400 });
     }
 
+    // IDOR Check
+    await validateEntityBelongsToCompany("expense", id, companyId, req, {
+      userId: context.user.id,
+      userEmail: context.user.email,
+    });
+
     const expense = await prisma.expense.findFirst({
-      where: { id, companyId: company.id },
+      where: { id, companyId },
     });
 
     if (!expense) {
@@ -212,10 +231,21 @@ export async function DELETE(req: Request) {
       }
     });
 
-    return NextResponse.json({ success: true, message: "Expense deleted successfully" });
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "DELETE_EXPENSE",
+      entity: "Expense",
+      entityId: expense.id,
+      details: `Deleted expense id ${expense.id}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return NextResponse.json({ ok: true, success: true, message: "Expense deleted successfully" });
   } catch (err: any) {
-    console.error("Expense deletion error:", err);
-    return NextResponse.json({ error: err.message || "Failed to delete expense" }, { status: 500 });
+    return handleAuthError(err);
   }
 }
-

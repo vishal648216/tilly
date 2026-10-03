@@ -37,12 +37,21 @@ export default async function ItemsPage({
     orderBy: { createdAt: "desc" },
   });
 
+  const isInventoryEnabled = company.settings?.inventoryEnabled ?? true;
+  const isServiceBusiness = company.businessType === "Service" || !isInventoryEnabled;
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Items & Inventory</h1>
-          <p className="text-sm text-slate-500">Products, stock levels, and inventory valuation</p>
+          <h1 className="text-2xl font-bold">
+            {isServiceBusiness ? "Services & Catalog" : "Items & Inventory"}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isServiceBusiness
+              ? "Service offerings, rates, and tax configuration"
+              : "Products, stock levels, and inventory valuation"}
+          </p>
         </div>
         <div className="flex gap-2">
           <SearchBar placeholder="Search item, SKU, barcode, HSN..." defaultValue={query} />
@@ -58,7 +67,7 @@ export default async function ItemsPage({
             />
           )}
           <Link href="/items/new" className="btn-primary inline-flex items-center gap-1.5">
-            <Plus className="h-4 w-4" /> Add Item
+            <Plus className="h-4 w-4" /> {isServiceBusiness ? "Add Service" : "Add Item"}
           </Link>
         </div>
       </div>
@@ -88,18 +97,18 @@ export default async function ItemsPage({
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Category / Barcode</th>
+                <th className="px-4 py-3 font-medium">Brand / Category / Barcode</th>
                 <th className="px-4 py-3 font-medium">HSN/SAC</th>
                 <th className="px-4 py-3 font-medium text-right">Sale Price</th>
                 <th className="px-4 py-3 font-medium text-right">Cost Price</th>
                 <th className="px-4 py-3 font-medium text-right">GST %</th>
-                <th className="px-4 py-3 font-medium text-right">Stock</th>
+                <th className="px-4 py-3 font-medium text-right">{isInventoryEnabled ? "Stock" : "Billing Unit"}</th>
               </tr>
             </thead>
             <tbody>
               {items.map((i) => {
                 const isService = i.type === "SERVICE";
-                const isLowStock = !isService && Number(i.stock) <= Number(i.minStock);
+                const isLowStock = isInventoryEnabled && !isService && Number(i.stock) <= Number(i.minStock);
                 return (
                   <tr key={i.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-900">
@@ -120,11 +129,18 @@ export default async function ItemsPage({
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       <div>
-                        {i.category && <span className="font-medium text-slate-700">{i.category}</span>}
+                        <div className="flex flex-wrap items-center gap-1">
+                          {i.brand && (
+                            <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                              {i.brand}
+                            </span>
+                          )}
+                          {i.category && <span className="font-medium text-slate-700">{i.category}</span>}
+                        </div>
                         {i.barcode && (
                           <span className="block text-xs font-mono text-slate-400">Barcode: {i.barcode}</span>
                         )}
-                        {!i.category && !i.barcode && "—"}
+                        {!i.category && !i.barcode && !i.brand && "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500 font-mono">{i.hsn ?? "—"}</td>
@@ -136,8 +152,8 @@ export default async function ItemsPage({
                     </td>
                     <td className="px-4 py-3 text-right text-slate-500">{i.gstRate.toString()}%</td>
                     <td className="px-4 py-3 text-right">
-                      {isService ? (
-                        <span className="text-xs text-slate-400 font-medium">N/A (Service)</span>
+                      {!isInventoryEnabled || isService ? (
+                        <span className="text-xs text-slate-500 font-medium">{i.unit || "Service"}</span>
                       ) : (
                         <span
                           className={`font-semibold ${

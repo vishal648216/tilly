@@ -15,7 +15,7 @@ export default async function NewInvoicePage({
 
   const invoiceType = searchParams.type === "PURCHASE" ? "PURCHASE" : "SALES";
 
-  const [parties, items] = await Promise.all([
+  const [parties, items, warehouses] = await Promise.all([
     prisma.party.findMany({
       where: {
         companyId: company.id,
@@ -26,6 +26,10 @@ export default async function NewInvoicePage({
       orderBy: { name: "asc" },
     }),
     prisma.item.findMany({ where: { companyId: company.id }, orderBy: { name: "asc" } }),
+    prisma.warehouse.findMany({
+      where: { companyId: company.id, active: true },
+      orderBy: { isDefault: "desc" },
+    }),
   ]);
 
   return (
@@ -36,6 +40,7 @@ export default async function NewInvoicePage({
       <NewInvoiceForm
         parties={parties}
         items={items}
+        warehouses={warehouses}
         companyState={company.state}
         invoiceType={invoiceType}
       />

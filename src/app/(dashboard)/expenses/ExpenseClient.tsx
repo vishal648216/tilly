@@ -213,7 +213,7 @@ export default function ExpenseClient({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            This Month's Expenses
+            This Month&apos;s Expenses
           </p>
           <p className="mt-2 text-2xl font-bold text-red-600">
             {formatCurrency(totalThisMonth)}
@@ -293,7 +293,7 @@ export default function ExpenseClient({
                   <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     <Wallet className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                     <p className="text-base font-medium text-slate-600">No expenses found</p>
-                    <p className="text-xs">Click "Add Expense" to log your first business expense.</p>
+                    <p className="text-xs">Click &quot;Add Expense&quot; to log your first business expense.</p>
                   </td>
                 </tr>
               ) : (
