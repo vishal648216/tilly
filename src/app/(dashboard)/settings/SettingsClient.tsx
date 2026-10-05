@@ -140,7 +140,7 @@ export default function SettingsClient({
     setTemplateLoading(templateType);
     setErrorMsg("");
     try {
-      const res = await fetch("/api/settings/templates/apply", {
+      const res = await fetch("/api/settings/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateType }),

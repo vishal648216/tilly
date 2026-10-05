@@ -93,6 +93,8 @@ export type InitialWorkflowData = {
   quotationId?: string;
   salesOrderId?: string;
   deliveryChallanId?: string;
+  purchaseOrderId?: string;
+  goodsReceiptId?: string;
   skipStockMovement?: boolean;
 };
 
@@ -458,6 +460,8 @@ export default function NewInvoiceForm({
           quotationId: initialData?.quotationId || null,
           salesOrderId: initialData?.salesOrderId || null,
           deliveryChallanId: initialData?.deliveryChallanId || null,
+          purchaseOrderId: initialData?.purchaseOrderId || null,
+          goodsReceiptId: initialData?.goodsReceiptId || null,
           skipStockMovement: Boolean(initialData?.skipStockMovement),
           lines: validLines.map((l) => ({
             itemId: l.itemId || undefined,

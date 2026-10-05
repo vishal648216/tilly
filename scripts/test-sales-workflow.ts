@@ -220,7 +220,7 @@ async function main() {
     partyId: party.id,
     warehouseId: warehouse.id,
     date: new Date(),
-    quotationId: quoteDirect.id,
+    isInterState: false,
     sourceDocType: "QUOTATION",
     sourceDocId: quoteDirect.id,
     lines: [

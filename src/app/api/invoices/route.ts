@@ -65,6 +65,9 @@ export async function POST(req: Request) {
       quotationId,
       salesOrderId,
       deliveryChallanId,
+      purchaseOrderId,
+      goodsReceiptId,
+      grnId,
       skipStockMovement,
     } = body;
 
@@ -169,10 +172,32 @@ export async function POST(req: Request) {
           : JSON.stringify(customFields)
         : undefined,
       isInterState: !!isInterState,
-      sourceDocType: sourceDocType || (quotationId ? "QUOTATION" : salesOrderId ? "SALES_ORDER" : deliveryChallanId ? "DELIVERY_CHALLAN" : undefined),
-      sourceDocId: sourceDocId || quotationId || salesOrderId || deliveryChallanId || undefined,
+      sourceDocType:
+        sourceDocType ||
+        (quotationId
+          ? "QUOTATION"
+          : salesOrderId
+          ? "SALES_ORDER"
+          : deliveryChallanId
+          ? "DELIVERY_CHALLAN"
+          : purchaseOrderId
+          ? "PURCHASE_ORDER"
+          : (goodsReceiptId || grnId)
+          ? "GOODS_RECEIPT"
+          : undefined),
+      sourceDocId:
+        sourceDocId ||
+        quotationId ||
+        salesOrderId ||
+        deliveryChallanId ||
+        purchaseOrderId ||
+        goodsReceiptId ||
+        grnId ||
+        undefined,
       salesOrderId: salesOrderId || undefined,
       deliveryChallanId: deliveryChallanId || undefined,
+      purchaseOrderId: purchaseOrderId || undefined,
+      goodsReceiptId: goodsReceiptId || grnId || undefined,
       skipStockMovement: Boolean(skipStockMovement),
     });
 
@@ -195,6 +220,20 @@ export async function POST(req: Request) {
       await prisma.salesOrder.update({
         where: { id: salesOrderId },
         data: { status: "DELIVERED" },
+      }).catch(() => {});
+    }
+
+    if (goodsReceiptId || grnId) {
+      await prisma.goodsReceipt.update({
+        where: { id: goodsReceiptId || grnId },
+        data: { invoiceId: invoice.id },
+      }).catch(() => {});
+    }
+
+    if (purchaseOrderId) {
+      await prisma.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: { status: "RECEIVED" },
       }).catch(() => {});
     }
 

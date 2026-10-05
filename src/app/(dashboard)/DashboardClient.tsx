@@ -262,7 +262,7 @@ export default function DashboardClient({
               <span className="rounded-md bg-emerald-100/70 text-emerald-800 px-2 py-0.5 text-[10px] font-bold">
                 Period: {data.periodLabel}
               </span>
-              <Link href="/sales" className="text-emerald-700 font-semibold hover:underline">
+              <Link href="/invoices" className="text-emerald-700 font-semibold hover:underline">
                 View Register →
               </Link>
             </div>

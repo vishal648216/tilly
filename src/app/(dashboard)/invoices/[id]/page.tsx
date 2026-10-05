@@ -79,10 +79,12 @@ export default async function InvoiceDetailPage({
           style={{ borderColor: primaryColor }}
         >
           <div>
-            {invoice.type === "SALES" ? (
+            {invoice.type === "SALES" || invoice.type === "SALES_RETURN" ? (
               <>
                 <div className="flex items-center gap-2 mb-1">
-                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Billed By (Seller)</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                    {invoice.type === "SALES_RETURN" ? "Issued By (Seller)" : "Billed By (Seller)"}
+                  </p>
                   <span
                     className="text-[9px] font-bold px-2 py-0.2 rounded text-white uppercase tracking-wider"
                     style={{ backgroundColor: primaryColor }}
@@ -113,7 +115,9 @@ export default async function InvoiceDetailPage({
               </>
             ) : (
               <>
-                <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Supplier / Vendor (Billed By)</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-700">
+                  {invoice.type === "PURCHASE_RETURN" ? "Buyer / Debit Note By" : "Supplier / Vendor (Billed By)"}
+                </p>
                 <h1 className="text-2xl font-bold text-slate-900">
                   {invoice.party ? invoice.party.name : "Vendor / Supplier"}
                 </h1>
@@ -136,7 +140,14 @@ export default async function InvoiceDetailPage({
               T
             </div>
             <h2 className="text-xl font-bold uppercase" style={{ color: primaryColor }}>
-              {customization.headerText || (invoice.type === "SALES" ? "Tax Invoice (Sales)" : "Purchase Bill (Inward)")}
+              {customization.headerText ||
+                (invoice.type === "SALES"
+                  ? "Tax Invoice (Sales)"
+                  : invoice.type === "SALES_RETURN"
+                  ? "Credit Note (Sales Return)"
+                  : invoice.type === "PURCHASE_RETURN"
+                  ? "Debit Note (Purchase Return)"
+                  : "Purchase Bill (Inward)")}
             </h2>
             <p className="text-sm text-slate-500">{displayName}</p>
           </div>
@@ -146,9 +157,15 @@ export default async function InvoiceDetailPage({
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded-lg bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase text-slate-400">
-              {invoice.type === "SALES" ? "Billed To (Customer / Buyer)" : "Billed To (Buyer / Consignee)"}
+              {invoice.type === "SALES"
+                ? "Billed To (Customer / Buyer)"
+                : invoice.type === "SALES_RETURN"
+                ? "Credit To (Customer)"
+                : invoice.type === "PURCHASE_RETURN"
+                ? "Debit To (Vendor / Supplier)"
+                : "Billed To (Buyer / Consignee)"}
             </p>
-            {invoice.type === "SALES" ? (
+            {invoice.type === "SALES" || invoice.type === "SALES_RETURN" ? (
               invoice.party ? (
                 <>
                   <p className="mt-1 font-bold text-slate-900">{invoice.party.name}</p>

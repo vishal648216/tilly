@@ -11,6 +11,8 @@ export default async function NewInvoicePage({
     quotationId?: string;
     salesOrderId?: string;
     challanId?: string;
+    purchaseOrderId?: string;
+    grnId?: string;
   };
 }) {
   const user = await getCurrentUser();
@@ -18,7 +20,8 @@ export default async function NewInvoicePage({
   const company = await getCurrentCompany();
   if (!company) redirect("/onboarding");
 
-  const invoiceType = searchParams.type === "PURCHASE" ? "PURCHASE" : "SALES";
+  const isPurchaseWorkflow = Boolean(searchParams.purchaseOrderId || searchParams.grnId);
+  const invoiceType = (searchParams.type === "PURCHASE" || isPurchaseWorkflow) ? "PURCHASE" : "SALES";
 
   const [parties, items, warehouses] = await Promise.all([
     prisma.party.findMany({
@@ -130,6 +133,74 @@ export default async function NewInvoicePage({
           unit: l.unit || "PCS",
           hsn: "",
           qty: Number(l.deliveredQty),
+          rate: Number(l.rate || 0),
+          discount: 0,
+          gstRate: 18,
+        })),
+      };
+    }
+  }
+
+  // Pre-load from Purchase Order
+  if (!initialData && searchParams.purchaseOrderId) {
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { id: searchParams.purchaseOrderId, companyId: company.id },
+      include: { lines: true, party: true, warehouse: true },
+    });
+    if (po) {
+      initialData = {
+        partyId: po.partyId || "",
+        warehouseId: po.warehouseId || undefined,
+        orderNo: po.poNo,
+        notes: po.notes ? `${po.notes} (Against PO ${po.poNo})` : `Billed against Purchase Order ${po.poNo}`,
+        purchaseOrderId: po.id,
+        sourceDocType: "PURCHASE_ORDER",
+        sourceDocId: po.id,
+        sourceDocLabel: `Purchase Order #${po.poNo}`,
+        lines: po.lines.map((l, idx) => ({
+          key: Date.now() + idx,
+          itemId: l.itemId || "",
+          name: l.name,
+          sku: l.sku || "",
+          barcode: "",
+          unit: l.unit || "PCS",
+          hsn: l.hsn || "",
+          qty: Number(l.orderedQty),
+          rate: Number(l.rate),
+          discount: Number(l.discount || 0),
+          gstRate: Number(l.gstRate || 0),
+        })),
+      };
+    }
+  }
+
+  // Pre-load from Goods Receipt Note (GRN)
+  if (!initialData && searchParams.grnId) {
+    const grn = await prisma.goodsReceipt.findFirst({
+      where: { id: searchParams.grnId, companyId: company.id },
+      include: { lines: true, party: true, warehouse: true, purchaseOrder: true },
+    });
+    if (grn) {
+      initialData = {
+        partyId: grn.partyId || "",
+        warehouseId: grn.warehouseId || undefined,
+        orderNo: grn.purchaseOrder?.poNo || grn.grnNo,
+        notes: `Billed from Goods Receipt Note ${grn.grnNo}`,
+        goodsReceiptId: grn.id,
+        purchaseOrderId: grn.purchaseOrderId || undefined,
+        skipStockMovement: true, // Physical inventory already inwarded into warehouse via GRN
+        sourceDocType: "GOODS_RECEIPT",
+        sourceDocId: grn.id,
+        sourceDocLabel: `Goods Receipt #${grn.grnNo}`,
+        lines: grn.lines.map((l, idx) => ({
+          key: Date.now() + idx,
+          itemId: l.itemId || "",
+          name: l.name,
+          sku: l.sku || "",
+          barcode: "",
+          unit: l.unit || "PCS",
+          hsn: "",
+          qty: Number(l.receivedQty),
           rate: Number(l.rate || 0),
           discount: 0,
           gstRate: 18,

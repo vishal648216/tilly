@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getCurrentCompany } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { ArrowRight, Package, CheckCircle2, Receipt } from "lucide-react";
+import { ArrowRight, Package, CheckCircle2, Receipt, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +60,18 @@ export default async function GoodsReceiptsPage({
         </div>
         <div className="flex items-center gap-2.5">
           <Link
-            href="/purchase-orders"
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 transition-colors"
+            href="/goods-receipts/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors"
           >
-            <span>View Purchase Orders</span>
-            <ArrowRight className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
+            New Goods Receipt
+          </Link>
+          <Link
+            href="/purchase-orders"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+          >
+            <span>Purchase Orders</span>
+            <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
@@ -107,12 +114,13 @@ export default async function GoodsReceiptsPage({
                 <th className="py-3 px-4 font-semibold text-center">Stock Entered</th>
                 <th className="py-3 px-4 font-semibold text-center">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Purchase Bill</th>
+                <th className="py-3 px-4 font-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {goodsReceipts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No goods receipt notes recorded. Create GRNs from confirmed Purchase Orders.
                   </td>
                 </tr>
@@ -127,7 +135,14 @@ export default async function GoodsReceiptsPage({
 
                   return (
                     <tr key={grn.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900">{grn.grnNo}</td>
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        <Link
+                          href={`/goods-receipts/${grn.id}`}
+                          className="text-indigo-600 hover:text-indigo-800 hover:underline"
+                        >
+                          {grn.grnNo}
+                        </Link>
+                      </td>
                       <td className="py-3 px-4 text-slate-600">
                         {new Date(grn.date).toLocaleDateString("en-IN")}
                       </td>
@@ -135,7 +150,16 @@ export default async function GoodsReceiptsPage({
                         {grn.party?.name || "Supplier"}
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-600">
-                        {grn.purchaseOrder?.poNo || "Direct GRN"}
+                        {grn.purchaseOrder ? (
+                          <Link
+                            href={`/purchase-orders/${grn.purchaseOrder.id}`}
+                            className="text-indigo-600 hover:underline"
+                          >
+                            {grn.purchaseOrder.poNo}
+                          </Link>
+                        ) : (
+                          "Direct GRN"
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-slate-800">
                         {totalReceived} units ({grn.lines.length} items)
@@ -175,6 +199,25 @@ export default async function GoodsReceiptsPage({
                         ) : (
                           <span className="text-slate-400 text-[11px]">—</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Link
+                            href={`/goods-receipts/${grn.id}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                          >
+                            View
+                          </Link>
+                          {!grn.invoice && grn.status !== "CANCELLED" && (
+                            <Link
+                              href={`/invoices/new?type=PURCHASE&grnId=${grn.id}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                              title="Create Purchase Bill from GRN"
+                            >
+                              To Bill
+                            </Link>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
