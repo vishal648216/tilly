@@ -248,7 +248,7 @@ export default async function DeliveryChallanDetailPage({
         <div className="grid grid-cols-2 gap-8 pt-12 mt-6 border-t border-slate-200">
           <div>
             <div className="h-16 border-b border-dashed border-slate-300"></div>
-            <p className="text-[11px] font-bold text-slate-600 mt-2">Receiver's Signature & Stamp</p>
+            <p className="text-[11px] font-bold text-slate-600 mt-2">Receiver&apos;s Signature &amp; Stamp</p>
             <p className="text-[10px] text-slate-400">
               Goods received in good condition and order
             </p>
