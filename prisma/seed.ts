@@ -31,7 +31,27 @@ async function main() {
   });
   console.log("👑 Super Admin created: admin@admin.com / admin@1234");
 
-  // 1. Demo user
+  // 1. Enterprise Tester User (VIP)
+  const testerPasswordHash = await bcrypt.hash("test1234", 10);
+  const testerUser = await prisma.user.upsert({
+    where: { email: "test@taily.in" },
+    update: {
+      role: "SUPER_ADMIN",
+      status: "APPROVED",
+      passwordHash: testerPasswordHash,
+    },
+    create: {
+      email: "test@taily.in",
+      name: "Enterprise Master Tester",
+      passwordHash: testerPasswordHash,
+      phone: "9876543210",
+      role: "SUPER_ADMIN",
+      status: "APPROVED",
+    },
+  });
+  console.log("🌟 Master Tester created: test@taily.in / test1234");
+
+  // 1b. Demo user
   const passwordHash = await bcrypt.hash("demo1234", 10);
   const user = await prisma.user.upsert({
     where: { email: "demo@taily.in" },
@@ -52,31 +72,101 @@ async function main() {
   // 2. Demo company
   const company = await prisma.company.upsert({
     where: { id: "demo-company-1" },
-    update: {},
+    update: { status: "ACTIVE" },
     create: {
       id: "demo-company-1",
-      name: "Taily Demo Store",
-      legalName: "Taily Demo Store Pvt Ltd",
+      name: "Taily Enterprise ERP",
+      legalName: "Taily Enterprise Solutions Pvt Ltd",
       email: "store@taily.in",
       phone: "9876543210",
-      address: "123 Market Road",
+      address: "123 Market Road, BKC",
       city: "Mumbai",
       state: "Maharashtra",
-      pincode: "400001",
+      pincode: "400051",
       gstin: "27ABCDE1234F1Z5",
       pan: "ABCDE1234F",
       currency: "INR",
       financialYear: "2026-27",
+      status: "ACTIVE",
     },
   });
-  console.log("✅ Company created: Taily Demo Store");
+  console.log("✅ Company created: Taily Enterprise ERP");
 
-  // 3. Link user to company as ADMIN
+  // 3. Link users to company as ADMIN
+  await prisma.companyMember.upsert({
+    where: { userId_companyId: { userId: superAdmin.id, companyId: company.id } },
+    update: { isActive: true, role: "COMPANY_ADMIN" },
+    create: { userId: superAdmin.id, companyId: company.id, role: "COMPANY_ADMIN", isActive: true },
+  });
+  await prisma.companyMember.upsert({
+    where: { userId_companyId: { userId: testerUser.id, companyId: company.id } },
+    update: { isActive: true, role: "COMPANY_ADMIN" },
+    create: { userId: testerUser.id, companyId: company.id, role: "COMPANY_ADMIN", isActive: true },
+  });
   await prisma.companyMember.upsert({
     where: { userId_companyId: { userId: user.id, companyId: company.id } },
     update: { isActive: true },
     create: { userId: user.id, companyId: company.id, role: "ADMIN", isActive: true },
   });
+
+  // 3b. Unlock all feature switches in CompanySettings
+  await prisma.companySettings.upsert({
+    where: { companyId: company.id },
+    update: {
+      inventoryEnabled: true,
+      gstEnabled: true,
+      warehouseEnabled: true,
+      multiWarehouseEnabled: true,
+      barcodeEnabled: true,
+      batchEnabled: true,
+      expiryEnabled: true,
+      serialEnabled: true,
+      manufacturingEnabled: true,
+      quotationEnabled: true,
+      salesOrderEnabled: true,
+      purchaseOrderEnabled: true,
+      deliveryChallanEnabled: true,
+      goodsReceiptEnabled: true,
+      salespersonEnabled: true,
+      priceListsEnabled: true,
+      negativeStockAllowed: true,
+      roundOffEnabled: true,
+    },
+    create: {
+      companyId: company.id,
+      inventoryEnabled: true,
+      gstEnabled: true,
+      warehouseEnabled: true,
+      multiWarehouseEnabled: true,
+      barcodeEnabled: true,
+      batchEnabled: true,
+      expiryEnabled: true,
+      serialEnabled: true,
+      manufacturingEnabled: true,
+      quotationEnabled: true,
+      salesOrderEnabled: true,
+      purchaseOrderEnabled: true,
+      deliveryChallanEnabled: true,
+      goodsReceiptEnabled: true,
+      salespersonEnabled: true,
+      priceListsEnabled: true,
+      negativeStockAllowed: true,
+      roundOffEnabled: true,
+    },
+  });
+
+  // 3c. Assign Enterprise Plan with 100 years validity
+  try {
+    const { assignSubscriptionToCompany } = await import("../src/lib/plans");
+    await assignSubscriptionToCompany({
+      companyId: company.id,
+      planCode: "ENTERPRISE",
+      status: "ACTIVE",
+      periodDays: 36500,
+    });
+  } catch (err) {
+    console.log("Enterprise subscription assignment note:", err);
+  }
 
   // 4. Chart of accounts
   for (const acc of DEFAULT_CHART_OF_ACCOUNTS) {

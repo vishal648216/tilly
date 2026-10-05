@@ -180,22 +180,43 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Demo Account Quick Access Box */}
+          {/* Testing Accounts Quick Access Box */}
           <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-center">
-            <p className="text-xs text-slate-600">
-              Testing ke liye demo account use karein:
+            <p className="text-xs font-medium text-slate-700">
+              Testing ke liye 1-Click Auto Fill karein:
             </p>
-            <div className="mt-2 flex items-center justify-center gap-2">
-              <code className="rounded-md bg-white border border-emerald-200 px-2 py-1 text-xs font-mono text-emerald-800">
-                demo@taily.in / demo1234
-              </code>
-              <button
-                type="button"
-                onClick={fillDemo}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition"
-              >
-                <Sparkles className="h-3 w-3" /> Auto Fill
-              </button>
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between rounded-lg bg-white border border-emerald-200 px-3 py-1.5 shadow-sm">
+                <div className="text-left">
+                  <span className="block text-[11px] font-semibold text-emerald-900">👑 Full Enterprise Test User:</span>
+                  <code className="text-xs font-mono font-bold text-emerald-700">test@taily.in / test1234</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail("test@taily.in");
+                    setPassword("test1234");
+                    setError("");
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto Fill
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg bg-white/70 border border-slate-200 px-3 py-1">
+                <div className="text-left">
+                  <span className="text-[11px] text-slate-500">Standard Demo: </span>
+                  <code className="text-xs font-mono text-slate-700">demo@taily.in / demo1234</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={fillDemo}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-800"
+                >
+                  Fill
+                </button>
+              </div>
             </div>
           </div>
         </form>
