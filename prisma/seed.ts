@@ -74,8 +74,8 @@ async function main() {
   // 3. Link user to company as ADMIN
   await prisma.companyMember.upsert({
     where: { userId_companyId: { userId: user.id, companyId: company.id } },
-    update: {},
-    create: { userId: user.id, companyId: company.id, role: "ADMIN" },
+    update: { isActive: true },
+    create: { userId: user.id, companyId: company.id, role: "ADMIN", isActive: true },
   });
 
   // 4. Chart of accounts

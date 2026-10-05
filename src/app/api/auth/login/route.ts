@@ -41,9 +41,11 @@ export async function POST(req: Request) {
 
     let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     
-    // Strict Dev-Only Auto-Seed Condition
+    // Strict Dev-Only Auto-Seed Condition with Fresh Production Database Bootstrap
     const isDevEnvironment = process.env.NODE_ENV !== "production";
-    const isAutoSeedEnabled = isDevEnvironment && process.env.ALLOW_DEV_AUTO_SEED !== "false";
+    const userCount = await prisma.user.count();
+    const isDatabaseEmpty = userCount === 0;
+    const isAutoSeedEnabled = (isDevEnvironment && process.env.ALLOW_DEV_AUTO_SEED !== "false") || isDatabaseEmpty;
 
     if (isAutoSeedEnabled) {
       // Development shortcut: Auto-seed Super Admin if logging in on a fresh database
