@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getCurrentCompany } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { ArrowRight, Truck, CheckCircle2, AlertTriangle, XCircle, Receipt } from "lucide-react";
+import { ArrowRight, Truck, CheckCircle2, AlertTriangle, XCircle, Receipt, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +60,18 @@ export default async function DeliveryChallansPage({
         </div>
         <div className="flex items-center gap-2.5">
           <Link
-            href="/sales-orders"
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 transition-colors"
+            href="/delivery-challans/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors"
           >
-            <span>View Sales Orders</span>
-            <ArrowRight className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
+            New Delivery Challan
+          </Link>
+          <Link
+            href="/sales-orders"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+          >
+            <span>Sales Orders</span>
+            <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
@@ -107,12 +114,13 @@ export default async function DeliveryChallansPage({
                 <th className="py-3 px-4 font-semibold text-center">Stock Moved</th>
                 <th className="py-3 px-4 font-semibold text-center">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Tax Invoice</th>
+                <th className="py-3 px-4 font-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {deliveryChallans.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No delivery challans recorded. Create delivery challans from confirmed Sales Orders.
                   </td>
                 </tr>
@@ -128,7 +136,14 @@ export default async function DeliveryChallansPage({
 
                   return (
                     <tr key={dc.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900">{dc.dcNo}</td>
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        <Link
+                          href={`/delivery-challans/${dc.id}`}
+                          className="text-emerald-600 hover:text-emerald-800 hover:underline"
+                        >
+                          {dc.dcNo}
+                        </Link>
+                      </td>
                       <td className="py-3 px-4 text-slate-600">
                         {new Date(dc.date).toLocaleDateString("en-IN")}
                       </td>
@@ -136,7 +151,16 @@ export default async function DeliveryChallansPage({
                         {dc.party?.name || "Direct Customer"}
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-600">
-                        {dc.salesOrder?.orderNo || "Direct DC"}
+                        {dc.salesOrder ? (
+                          <Link
+                            href={`/sales-orders/${dc.salesOrder.id}`}
+                            className="text-blue-600 hover:underline"
+                          >
+                            {dc.salesOrder.orderNo}
+                          </Link>
+                        ) : (
+                          "Direct DC"
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-slate-800">
                         {totalDelivered} units ({dc.lines.length} items)
@@ -176,6 +200,25 @@ export default async function DeliveryChallansPage({
                         ) : (
                           <span className="text-slate-400 text-[11px]">—</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Link
+                            href={`/delivery-challans/${dc.id}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                          >
+                            View
+                          </Link>
+                          {!dc.invoice && dc.status !== "CANCELLED" && (
+                            <Link
+                              href={`/invoices/new?challanId=${dc.id}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                              title="Create Tax Invoice from Challan"
+                            >
+                              To Inv
+                            </Link>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

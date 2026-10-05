@@ -56,10 +56,16 @@ export async function POST(req: Request) {
       paymentReference,
       status,
       quickAction,
-      lines,
       notes,
       isInterState,
       customFields,
+      lines,
+      sourceDocType,
+      sourceDocId,
+      quotationId,
+      salesOrderId,
+      deliveryChallanId,
+      skipStockMovement,
     } = body;
 
     const invoiceType = type === "PURCHASE" ? "PURCHASE" : "SALES";
@@ -163,7 +169,34 @@ export async function POST(req: Request) {
           : JSON.stringify(customFields)
         : undefined,
       isInterState: !!isInterState,
+      sourceDocType: sourceDocType || (quotationId ? "QUOTATION" : salesOrderId ? "SALES_ORDER" : deliveryChallanId ? "DELIVERY_CHALLAN" : undefined),
+      sourceDocId: sourceDocId || quotationId || salesOrderId || deliveryChallanId || undefined,
+      salesOrderId: salesOrderId || undefined,
+      deliveryChallanId: deliveryChallanId || undefined,
+      skipStockMovement: Boolean(skipStockMovement),
     });
+
+    // Update workflow status on linked documents
+    if (quotationId) {
+      await prisma.quotation.update({
+        where: { id: quotationId },
+        data: { status: "CONVERTED" },
+      }).catch(() => {});
+    }
+
+    if (deliveryChallanId) {
+      await prisma.deliveryChallan.update({
+        where: { id: deliveryChallanId },
+        data: { invoiceId: invoice.id, status: "DELIVERED" },
+      }).catch(() => {});
+    }
+
+    if (salesOrderId) {
+      await prisma.salesOrder.update({
+        where: { id: salesOrderId },
+        data: { status: "DELIVERED" },
+      }).catch(() => {});
+    }
 
     const meta = getClientMetadata(req);
     await recordAuditLog({

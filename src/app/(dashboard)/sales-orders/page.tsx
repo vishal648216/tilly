@@ -63,11 +63,17 @@ export default async function SalesOrdersPage({
         </div>
         <div className="flex items-center gap-2.5">
           <Link
-            href="/invoices/new"
+            href="/sales-orders/new"
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            New Direct Invoice
+            New Sales Order
+          </Link>
+          <Link
+            href="/invoices/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+          >
+            Direct Invoice
           </Link>
         </div>
       </div>
@@ -110,12 +116,13 @@ export default async function SalesOrdersPage({
                 <th className="py-3 px-4 font-semibold text-right">Amount</th>
                 <th className="py-3 px-4 font-semibold text-center">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Linked Docs</th>
+                <th className="py-3 px-4 font-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {salesOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No sales orders found. Use quotations or sales order workflow to track customer orders.
                   </td>
                 </tr>
@@ -124,6 +131,7 @@ export default async function SalesOrdersPage({
                   const totalOrdered = so.lines.reduce((a, l) => a + Number(l.orderedQty), 0);
                   const totalDelivered = so.lines.reduce((a, l) => a + Number(l.deliveredQty), 0);
                   const percent = totalOrdered > 0 ? Math.min(100, Math.round((totalDelivered / totalOrdered) * 100)) : 0;
+                  const isFullyDelivered = totalOrdered > 0 && totalDelivered >= totalOrdered;
 
                   const statusColors: Record<string, string> = {
                     DRAFT: "bg-amber-50 text-amber-700 border-amber-200",
@@ -135,7 +143,14 @@ export default async function SalesOrdersPage({
 
                   return (
                     <tr key={so.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900">{so.orderNo}</td>
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        <Link
+                          href={`/sales-orders/${so.id}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {so.orderNo}
+                        </Link>
+                      </td>
                       <td className="py-3 px-4 text-slate-600">
                         {new Date(so.date).toLocaleDateString("en-IN")}
                       </td>
@@ -174,7 +189,7 @@ export default async function SalesOrdersPage({
                         <div className="flex items-center justify-center gap-1.5">
                           {so.deliveryChallans.length > 0 && (
                             <Link
-                              href="/delivery-challans"
+                              href={`/delivery-challans/${so.deliveryChallans[0].id}`}
                               title={`${so.deliveryChallans.length} Challan(s)`}
                               className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200"
                             >
@@ -195,6 +210,32 @@ export default async function SalesOrdersPage({
                           {so.deliveryChallans.length === 0 && so.invoices.length === 0 && (
                             <span className="text-slate-400 text-[11px]">—</span>
                           )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Link
+                            href={`/sales-orders/${so.id}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                          >
+                            View
+                          </Link>
+                          {!isFullyDelivered && so.status !== "CANCELLED" && (
+                            <Link
+                              href={`/delivery-challans/new?salesOrderId=${so.id}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                              title="Dispatch Delivery Challan"
+                            >
+                              Dispatch
+                            </Link>
+                          )}
+                          <Link
+                            href={`/invoices/new?salesOrderId=${so.id}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                            title="Direct Tax Invoice"
+                          >
+                            To Inv
+                          </Link>
                         </div>
                       </td>
                     </tr>

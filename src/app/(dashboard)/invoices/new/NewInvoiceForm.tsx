@@ -81,18 +81,35 @@ const emptyLine: Line = {
   gstRate: 0,
 };
 
+export type InitialWorkflowData = {
+  partyId?: string;
+  warehouseId?: string;
+  orderNo?: string;
+  notes?: string;
+  lines?: Line[];
+  sourceDocType?: string;
+  sourceDocId?: string;
+  sourceDocLabel?: string;
+  quotationId?: string;
+  salesOrderId?: string;
+  deliveryChallanId?: string;
+  skipStockMovement?: boolean;
+};
+
 export default function NewInvoiceForm({
   parties,
   items,
   warehouses = [],
   companyState,
   invoiceType = "SALES",
+  initialData,
 }: {
   parties: Party[];
   items: any[];
   warehouses?: Warehouse[];
   companyState: string | null;
   invoiceType?: "SALES" | "PURCHASE";
+  initialData?: InitialWorkflowData | null;
 }) {
   const router = useRouter();
   const isPurchase = invoiceType === "PURCHASE";
@@ -101,15 +118,15 @@ export default function NewInvoiceForm({
   const [itemsList, setItemsList] = useState<any[]>(items);
 
   // Form Header State
-  const [partyId, setPartyId] = useState("");
+  const [partyId, setPartyId] = useState(initialData?.partyId || "");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const [warehouseId, setWarehouseId] = useState(
-    warehouses.find((w) => w.isDefault)?.id || warehouses[0]?.id || ""
+    initialData?.warehouseId || warehouses.find((w) => w.isDefault)?.id || warehouses[0]?.id || ""
   );
-  const [orderNo, setOrderNo] = useState("");
+  const [orderNo, setOrderNo] = useState(initialData?.orderNo || "");
   const [paymentTerms, setPaymentTerms] = useState("Immediate");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(initialData?.notes || "");
 
   // Purchase Specific Fields
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState("");
@@ -122,7 +139,11 @@ export default function NewInvoiceForm({
   const [salesperson, setSalesperson] = useState("");
 
   // Lines State
-  const [lines, setLines] = useState<Line[]>([{ ...emptyLine, key: Date.now() }]);
+  const [lines, setLines] = useState<Line[]>(
+    initialData?.lines && initialData.lines.length > 0
+      ? initialData.lines
+      : [{ ...emptyLine, key: Date.now() }]
+  );
 
   // Header Charges & Totals State
   const [discountTotal, setDiscountTotal] = useState<number>(0);
@@ -432,6 +453,12 @@ export default function NewInvoiceForm({
           quickAction: action,
           isInterState,
           notes,
+          sourceDocType: initialData?.sourceDocType || null,
+          sourceDocId: initialData?.sourceDocId || null,
+          quotationId: initialData?.quotationId || null,
+          salesOrderId: initialData?.salesOrderId || null,
+          deliveryChallanId: initialData?.deliveryChallanId || null,
+          skipStockMovement: Boolean(initialData?.skipStockMovement),
           lines: validLines.map((l) => ({
             itemId: l.itemId || undefined,
             name: l.name,
@@ -478,6 +505,27 @@ export default function NewInvoiceForm({
 
   return (
     <div className="space-y-6">
+      {initialData?.sourceDocLabel && (
+        <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 p-4 text-emerald-950 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-sm shadow">
+              ✓
+            </span>
+            <div>
+              <p className="font-bold text-sm text-slate-900">
+                Converted from {initialData.sourceDocLabel}
+              </p>
+              <p className="text-xs text-slate-600">
+                Customer, items, quantities, and GST rates have been auto-populated from your workflow.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+            Workflow Linked
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 flex items-center gap-2 shadow-xs">
           <AlertCircle className="h-5 w-5 shrink-0" />
