@@ -1091,23 +1091,6 @@ export default function NewInvoiceForm({
               <span className="font-mono font-semibold">₹{totals.subTotal.toFixed(2)}</span>
             </div>
 
-            {/* Extra Bill Discount Input (Optional) */}
-            <div className="flex justify-between items-center text-xs text-slate-500 pt-0.5">
-              <span>Extra Bill Discount (Optional)</span>
-              <div className="flex items-center gap-1">
-                <span>-₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="input py-0.5 px-2 w-24 text-right text-xs font-mono"
-                  value={discountTotal || ""}
-                  onChange={(e) => setDiscountTotal(parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
             {/* Freight Charges */}
             <div className="flex justify-between items-center text-slate-600">
               <span className="flex items-center gap-1">
