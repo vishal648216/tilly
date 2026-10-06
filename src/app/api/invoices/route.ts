@@ -162,6 +162,8 @@ export async function POST(req: Request) {
         hsn: l.hsn ? String(l.hsn).trim() : undefined,
         qty: Number(l.qty),
         rate: Number(l.rate),
+        purchasePrice: l.purchasePrice !== undefined ? Number(l.purchasePrice) : Number(l.rate),
+        salePrice: l.salePrice !== undefined ? Number(l.salePrice) : undefined,
         discount: l.discount ? Number(l.discount) : 0,
         gstRate: Number(l.gstRate) || 0,
       })),

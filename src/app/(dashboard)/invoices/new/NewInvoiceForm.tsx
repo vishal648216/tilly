@@ -64,6 +64,8 @@ type Line = {
   hsn: string;
   qty: number;
   rate: number;
+  purchasePrice?: number;
+  salePrice?: number;
   discount: number;
   gstRate: number;
 };
@@ -78,8 +80,10 @@ const emptyLine: Line = {
   hsn: "",
   qty: 1,
   rate: 0,
+  purchasePrice: 0,
+  salePrice: 0,
   discount: 0,
-  gstRate: 0,
+  gstRate: 18,
 };
 
 export type InitialWorkflowData = {
@@ -296,20 +300,43 @@ export default function NewInvoiceForm({
   function selectItem(key: number, itemId: string) {
     const item = itemsList.find((i) => i.id === itemId);
     if (item) {
-      updateLine(key, "itemId", itemId);
-      updateLine(key, "name", item.name);
-      updateLine(key, "sku", item.sku || "");
-      updateLine(key, "barcode", item.barcode || "");
-      updateLine(key, "unit", item.unit || "PCS");
-      updateLine(key, "hsn", item.hsn || "");
-      updateLine(
-        key,
-        "rate",
-        isPurchase ? parseFloat(item.purchasePrice || 0) : parseFloat(item.salePrice || 0)
+      const pPrice = Number(item.purchasePrice || 0);
+      const sPrice = Number(item.salePrice || 0);
+      const gRate =
+        item.gstRate !== undefined && item.gstRate !== null && !isNaN(Number(item.gstRate))
+          ? Number(item.gstRate)
+          : 18;
+
+      setLines((ls) =>
+        ls.map((l) =>
+          l.key === key
+            ? {
+                ...l,
+                itemId,
+                name: item.name,
+                sku: item.sku || "",
+                barcode: item.barcode || "",
+                unit: item.unit || "PCS",
+                hsn: item.hsn || "",
+                rate: isPurchase ? (pPrice || sPrice || 0) : (sPrice || pPrice || 0),
+                purchasePrice: pPrice || (isPurchase ? Number(l.rate || 0) : 0),
+                salePrice: sPrice || 0,
+                gstRate: gRate,
+              }
+            : l
+        )
       );
-      updateLine(key, "gstRate", parseFloat(item.gstRate || 0));
     } else {
-      updateLine(key, "itemId", "");
+      setLines((ls) =>
+        ls.map((l) =>
+          l.key === key
+            ? {
+                ...l,
+                itemId: "",
+              }
+            : l
+        )
+      );
     }
   }
 
@@ -503,6 +530,8 @@ export default function NewInvoiceForm({
               hsn: l.hsn || undefined,
               qty: Number(l.qty),
               rate: Number(l.rate),
+              purchasePrice: Number(l.purchasePrice || l.rate),
+              salePrice: Number(l.salePrice || 0),
               discount: discAmt,
               gstRate: Number(l.gstRate),
             };
@@ -795,11 +824,20 @@ export default function NewInvoiceForm({
                 <th className="px-3 py-2 font-medium w-24">SKU</th>
                 <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
                 <th className="px-3 py-2 font-medium w-20">Unit</th>
-                <th className="px-3 py-2 text-right font-medium w-28">Rate (₹)</th>
+                <th className="px-3 py-2 text-right font-medium w-28">
+                  {isPurchase ? "Purchase Price (₹)" : "Rate (₹)"}
+                </th>
+                {isPurchase && (
+                  <th className="px-3 py-2 text-right font-medium w-28 text-emerald-700 bg-emerald-50/50">
+                    Selling Price (₹)
+                  </th>
+                )}
                 <th className="px-3 py-2 text-right font-medium w-24">Disc (%)</th>
                 <th className="px-3 py-2 text-right font-medium w-20">GST %</th>
                 <th className="px-3 py-2 text-right font-medium w-28">Taxable (₹)</th>
-                <th className="px-3 py-2 text-right font-medium w-28">Total (₹)</th>
+                <th className="px-3 py-2 text-right font-medium w-36">
+                  {isPurchase ? "Total Purchase Price (₹)" : "Total (₹)"}
+                </th>
                 <th className="px-3 py-2 w-10"></th>
               </tr>
             </thead>
@@ -890,18 +928,41 @@ export default function NewInvoiceForm({
                       </select>
                     </td>
 
-                    {/* Rate */}
+                    {/* Rate / Purchase Price */}
                     <td className="px-3 py-2">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
+                        placeholder="0.00"
                         className="input w-full text-right text-xs font-mono"
                         value={line.rate || ""}
-                        onChange={(e) => updateLine(line.key, "rate", parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          updateLine(line.key, "rate", val);
+                          updateLine(line.key, "purchasePrice", val);
+                        }}
                         required
                       />
                     </td>
+
+                    {/* Selling Price (for Purchase Bill) */}
+                    {isPurchase && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="input w-full text-right text-xs font-mono border-emerald-300 focus:border-emerald-500 bg-emerald-50/30"
+                          value={line.salePrice || ""}
+                          onChange={(e) =>
+                            updateLine(line.key, "salePrice", parseFloat(e.target.value) || 0)
+                          }
+                          title="Selling Price for this item"
+                        />
+                      </td>
+                    )}
 
                     {/* Line Discount % */}
                     <td className="px-3 py-2">
@@ -932,8 +993,8 @@ export default function NewInvoiceForm({
                     {/* GST % */}
                     <td className="px-3 py-2">
                       <select
-                        className="input w-full text-right text-xs"
-                        value={line.gstRate}
+                        className="input w-full text-right text-xs font-semibold"
+                        value={Number(line.gstRate !== undefined ? line.gstRate : 18)}
                         onChange={(e) => updateLine(line.key, "gstRate", parseFloat(e.target.value))}
                       >
                         <option value="0">0%</option>

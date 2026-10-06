@@ -24,6 +24,8 @@ export type InvoiceLineInput = {
   hsn?: string;
   qty: number;
   rate: number;
+  purchasePrice?: number;
+  salePrice?: number;
   discount?: number; // line discount
   gstRate: number;
 };
@@ -456,7 +458,9 @@ export async function createInvoice(input: CreateInvoiceInput) {
     }
 
     // B. Resolve / Auto-create Items & Record Stock Movements
-    for (const line of builtLines) {
+    for (let i = 0; i < builtLines.length; i++) {
+      const line = builtLines[i];
+      const rawLine = lines[i];
       const cleanName = line.name.trim();
       let matchedItem = null;
 
@@ -478,6 +482,15 @@ export async function createInvoice(input: CreateInvoiceInput) {
         if (settings.inventoryEnabled) {
           if (matchedItem && matchedItem.type !== "SERVICE") {
             line.itemId = matchedItem.id;
+            // Update purchase price, sale price, and gst rate on the item master
+            await tx.item.update({
+              where: { id: matchedItem.id },
+              data: {
+                purchasePrice: line.rate,
+                ...(rawLine?.salePrice && Number(rawLine.salePrice) > 0 ? { salePrice: new Decimal(rawLine.salePrice) } : {}),
+                ...(rawLine?.gstRate !== undefined ? { gstRate: new Decimal(rawLine.gstRate) } : {}),
+              },
+            }).catch(() => {});
           } else if (cleanName && (!matchedItem || matchedItem.type !== "SERVICE")) {
             // Auto-create newly purchased product
             const newItem = await tx.item.create({
@@ -490,7 +503,9 @@ export async function createInvoice(input: CreateInvoiceInput) {
                 gstRate: line.gstRate,
                 purchasePrice: line.rate,
                 salePrice: new Decimal(
-                  roundTo2(line.rate.toNumber() > 0 ? line.rate.toNumber() * 1.2 : 0)
+                  rawLine?.salePrice && Number(rawLine.salePrice) > 0
+                    ? Number(rawLine.salePrice)
+                    : roundTo2(line.rate.toNumber() > 0 ? line.rate.toNumber() * 1.2 : 0)
                 ),
                 stock: 0,
                 type: "PRODUCT",
