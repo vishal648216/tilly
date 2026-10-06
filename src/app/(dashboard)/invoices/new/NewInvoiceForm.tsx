@@ -817,28 +817,28 @@ export default function NewInvoiceForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[1220px]">
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-3 py-2 font-medium">Product / Item</th>
-                <th className="px-3 py-2 font-medium w-24">SKU</th>
-                <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
-                <th className="px-3 py-2 font-medium w-20">Unit</th>
-                <th className="px-3 py-2 text-right font-medium w-28">
+                <th className="px-3 py-2.5 font-medium min-w-[220px]">Product / Item</th>
+                <th className="px-3 py-2.5 font-medium w-24 min-w-[90px]">SKU</th>
+                <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[95px]">Qty</th>
+                <th className="px-3 py-2.5 font-medium w-24 min-w-[95px]">Unit</th>
+                <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[115px]">
                   {isPurchase ? "Purchase Price (₹)" : "Rate (₹)"}
                 </th>
                 {isPurchase && (
-                  <th className="px-3 py-2 text-right font-medium w-28 text-emerald-700 bg-emerald-50/50">
+                  <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[115px] text-emerald-700 bg-emerald-50/50">
                     Selling Price (₹)
                   </th>
                 )}
-                <th className="px-3 py-2 text-right font-medium w-24">Disc (%)</th>
-                <th className="px-3 py-2 text-right font-medium w-20">GST %</th>
-                <th className="px-3 py-2 text-right font-medium w-28">Taxable (₹)</th>
-                <th className="px-3 py-2 text-right font-medium w-36">
+                <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[85px]">Disc (%)</th>
+                <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[95px]">GST %</th>
+                <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[105px]">Taxable (₹)</th>
+                <th className="px-3 py-2.5 text-right font-medium w-36 min-w-[140px]">
                   {isPurchase ? "Total Purchase Price (₹)" : "Total (₹)"}
                 </th>
-                <th className="px-3 py-2 w-10"></th>
+                <th className="px-3 py-2.5 w-10 min-w-[40px]"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -855,7 +855,7 @@ export default function NewInvoiceForm({
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
                         <select
-                          className="input flex-1 min-w-[140px] text-xs"
+                          className="input flex-1 min-w-[140px] text-xs px-2.5 py-1.5"
                           value={line.itemId}
                           onChange={(e) => selectItem(line.key, e.target.value)}
                         >
@@ -881,7 +881,7 @@ export default function NewInvoiceForm({
                       <input
                         type="text"
                         placeholder="Item description / name"
-                        className="input mt-1 w-full text-xs"
+                        className="input mt-1 w-full text-xs px-2.5 py-1.5"
                         value={line.name}
                         onChange={(e) => updateLine(line.key, "name", e.target.value)}
                         required
@@ -893,7 +893,7 @@ export default function NewInvoiceForm({
                       <input
                         type="text"
                         placeholder="SKU"
-                        className="input w-full text-xs font-mono"
+                        className="input w-full text-xs font-mono px-2.5 py-1.5"
                         value={line.sku}
                         onChange={(e) => updateLine(line.key, "sku", e.target.value)}
                       />
@@ -905,7 +905,8 @@ export default function NewInvoiceForm({
                         type="number"
                         min="0.01"
                         step="any"
-                        className="input w-full text-right text-xs"
+                        placeholder="1"
+                        className="input w-full text-right text-xs px-2.5 py-1.5 font-medium"
                         value={line.qty || ""}
                         onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
                         required
@@ -915,7 +916,7 @@ export default function NewInvoiceForm({
                     {/* Unit */}
                     <td className="px-3 py-2">
                       <select
-                        className="input w-full text-xs"
+                        className="input w-full text-xs px-2 py-1.5 font-medium"
                         value={line.unit}
                         onChange={(e) => updateLine(line.key, "unit", e.target.value)}
                       >
@@ -935,7 +936,7 @@ export default function NewInvoiceForm({
                         min="0"
                         step="0.01"
                         placeholder="0.00"
-                        className="input w-full text-right text-xs font-mono"
+                        className="input w-full text-right text-xs font-mono px-2.5 py-1.5"
                         value={line.rate || ""}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
@@ -954,7 +955,7 @@ export default function NewInvoiceForm({
                           min="0"
                           step="0.01"
                           placeholder="0.00"
-                          className="input w-full text-right text-xs font-mono border-emerald-300 focus:border-emerald-500 bg-emerald-50/30"
+                          className="input w-full text-right text-xs font-mono px-2.5 py-1.5 border-emerald-300 focus:border-emerald-500 bg-emerald-50/30 font-medium"
                           value={line.salePrice || ""}
                           onChange={(e) =>
                             updateLine(line.key, "salePrice", parseFloat(e.target.value) || 0)
@@ -973,7 +974,7 @@ export default function NewInvoiceForm({
                           max="100"
                           step="0.01"
                           placeholder="0"
-                          className="input w-full text-right text-xs font-mono pr-5"
+                          className="input w-full text-right text-xs font-mono pr-5 pl-2 py-1.5"
                           value={line.discount || ""}
                           onChange={(e) =>
                             updateLine(line.key, "discount", parseFloat(e.target.value) || 0)
@@ -993,7 +994,7 @@ export default function NewInvoiceForm({
                     {/* GST % */}
                     <td className="px-3 py-2">
                       <select
-                        className="input w-full text-right text-xs font-semibold"
+                        className="input w-full text-right text-xs font-semibold px-2 py-1.5"
                         value={Number(line.gstRate !== undefined ? line.gstRate : 18)}
                         onChange={(e) => updateLine(line.key, "gstRate", parseFloat(e.target.value))}
                       >
