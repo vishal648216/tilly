@@ -230,7 +230,9 @@ export default function NewInvoiceForm({
 
   // Live Totals calculation
   const totals = useMemo(() => {
-    let subTotal = 0,
+    let grossTotal = 0,
+      itemDiscounts = 0,
+      subTotal = 0,
       cgst = 0,
       sgst = 0,
       igst = 0;
@@ -241,6 +243,8 @@ export default function NewInvoiceForm({
       const taxable = Math.max(0, roundTo2(baseAmt - lineDiscAmt));
       const gst = roundTo2((taxable * Number(l.gstRate || 0)) / 100);
 
+      grossTotal += baseAmt;
+      itemDiscounts += lineDiscAmt;
       subTotal += taxable;
       if (isInterState) {
         igst += gst;
@@ -251,6 +255,7 @@ export default function NewInvoiceForm({
     }
 
     const disc = Number(discountTotal || 0);
+    const totalDiscount = roundTo2(itemDiscounts + disc);
     const freight = Number(freightTotal || 0);
     const other = Number(otherChargesTotal || 0);
 
@@ -261,6 +266,9 @@ export default function NewInvoiceForm({
     const balance = roundTo2(grand - paid);
 
     return {
+      grossTotal: roundTo2(grossTotal),
+      itemDiscounts: roundTo2(itemDiscounts),
+      totalDiscount,
       subTotal: roundTo2(subTotal),
       cgst: roundTo2(cgst),
       sgst: roundTo2(sgst),
@@ -1063,23 +1071,36 @@ export default function NewInvoiceForm({
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center text-slate-600">
-              <span>Subtotal (Taxable Value)</span>
-              <span className="font-mono">₹{totals.subTotal.toFixed(2)}</span>
+              <span>Gross Amount</span>
+              <span className="font-mono">₹{totals.grossTotal.toFixed(2)}</span>
             </div>
 
-            {/* Overall Discount Input */}
-            <div className="flex justify-between items-center text-slate-600">
-              <span className="flex items-center gap-1">
-                <Percent className="h-3.5 w-3.5 text-slate-400" />
-                <span>Overall Discount</span>
+            {/* Total Discount of the whole bill */}
+            <div className="flex justify-between items-center bg-emerald-50/70 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+              <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                <Percent className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Total Discount</span>
               </span>
+              <span className="font-mono font-bold text-sm text-emerald-700">
+                -₹{totals.totalDiscount.toFixed(2)}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center text-slate-600">
+              <span>Subtotal (Taxable Value)</span>
+              <span className="font-mono font-semibold">₹{totals.subTotal.toFixed(2)}</span>
+            </div>
+
+            {/* Extra Bill Discount Input (Optional) */}
+            <div className="flex justify-between items-center text-xs text-slate-500 pt-0.5">
+              <span>Extra Bill Discount (Optional)</span>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-slate-400">-₹</span>
+                <span>-₹</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  className="input py-1 px-2 w-28 text-right text-xs font-mono"
+                  className="input py-0.5 px-2 w-24 text-right text-xs font-mono"
                   value={discountTotal || ""}
                   onChange={(e) => setDiscountTotal(parseFloat(e.target.value) || 0)}
                   placeholder="0.00"
