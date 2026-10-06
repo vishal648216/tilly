@@ -23,7 +23,7 @@ export default async function NewInvoicePage({
   const isPurchaseWorkflow = Boolean(searchParams.purchaseOrderId || searchParams.grnId);
   const invoiceType = (searchParams.type === "PURCHASE" || isPurchaseWorkflow) ? "PURCHASE" : "SALES";
 
-  const [parties, items, warehouses] = await Promise.all([
+  const [parties, items, warehouses, teamMembers, existingSalespersons] = await Promise.all([
     prisma.party.findMany({
       where: {
         companyId: company.id,
@@ -38,7 +38,21 @@ export default async function NewInvoicePage({
       where: { companyId: company.id, active: true },
       orderBy: { isDefault: "desc" },
     }),
+    prisma.companyMember.findMany({
+      where: { companyId: company.id, isActive: true },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { user: { name: "asc" } },
+    }),
+    prisma.invoice.findMany({
+      where: { companyId: company.id, salesperson: { not: null } },
+      select: { salesperson: true },
+      distinct: ["salesperson"],
+    }),
   ]);
+
+  const teamNames = teamMembers.map((m) => m.user.name).filter(Boolean);
+  const historicalNames = existingSalespersons.map((s) => s.salesperson).filter(Boolean) as string[];
+  const salespersonsList = Array.from(new Set([...teamNames, ...historicalNames]));
 
   let initialData: any = null;
 
@@ -221,6 +235,7 @@ export default async function NewInvoicePage({
         companyState={company.state}
         invoiceType={invoiceType}
         initialData={initialData}
+        salespersons={salespersonsList}
       />
     </div>
   );

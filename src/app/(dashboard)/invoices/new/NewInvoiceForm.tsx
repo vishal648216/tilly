@@ -30,6 +30,7 @@ type Party = {
   phone?: string | null;
   billingAddress?: string | null;
   shippingAddress?: string | null;
+  salesperson?: string | null;
   creditLimit?: any;
 };
 
@@ -105,6 +106,7 @@ export default function NewInvoiceForm({
   companyState,
   invoiceType = "SALES",
   initialData,
+  salespersons = [],
 }: {
   parties: Party[];
   items: any[];
@@ -112,9 +114,22 @@ export default function NewInvoiceForm({
   companyState: string | null;
   invoiceType?: "SALES" | "PURCHASE";
   initialData?: InitialWorkflowData | null;
+  salespersons?: string[];
 }) {
   const router = useRouter();
   const isPurchase = invoiceType === "PURCHASE";
+
+  const defaultSalesReps = [
+    "Direct / Counter Sales",
+    "Amit Sharma (Field Sales)",
+    "Rahul Verma (Key Accounts)",
+    "Priya Patel (Retail Counter)",
+    "Vikram Singh (Corporate)",
+  ];
+
+  const salesOptions = useMemo(() => {
+    return Array.from(new Set([...salespersons, ...defaultSalesReps]));
+  }, [salespersons]);
 
   const [partiesList, setPartiesList] = useState<Party[]>(parties);
   const [itemsList, setItemsList] = useState<any[]>(items);
@@ -139,6 +154,7 @@ export default function NewInvoiceForm({
   const [shippingAddress, setShippingAddress] = useState("");
   const [placeOfSupply, setPlaceOfSupply] = useState(companyState || "");
   const [salesperson, setSalesperson] = useState("");
+  const [isCustomSalesperson, setIsCustomSalesperson] = useState(false);
 
   // Lines State
   const [lines, setLines] = useState<Line[]>(
@@ -199,6 +215,10 @@ export default function NewInvoiceForm({
       if (p.state) setPlaceOfSupply(p.state);
       if (p.billingAddress) setBillingAddress(p.billingAddress);
       if (p.shippingAddress) setShippingAddress(p.shippingAddress);
+      if (p.salesperson) {
+        setSalesperson(p.salesperson);
+        setIsCustomSalesperson(false);
+      }
     }
   }
 
@@ -627,14 +647,64 @@ export default function NewInvoiceForm({
             </>
           ) : (
             <div>
-              <label className="text-xs font-semibold text-slate-700">Salesperson</label>
-              <input
-                type="text"
-                placeholder="Agent / Sales rep"
-                className="input mt-1 w-full"
-                value={salesperson}
-                onChange={(e) => setSalesperson(e.target.value)}
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-700">Salesperson</label>
+                {isCustomSalesperson ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomSalesperson(false);
+                      setSalesperson("");
+                    }}
+                    className="text-[11px] text-brand-600 hover:underline font-medium"
+                  >
+                    Select from List
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomSalesperson(true);
+                      setSalesperson("");
+                    }}
+                    className="text-[11px] text-brand-600 hover:underline font-medium"
+                  >
+                    + Custom Name
+                  </button>
+                )}
+              </div>
+
+              {isCustomSalesperson ? (
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Enter salesperson name..."
+                  className="input w-full text-sm"
+                  value={salesperson}
+                  onChange={(e) => setSalesperson(e.target.value)}
+                />
+              ) : (
+                <select
+                  className="input w-full text-sm"
+                  value={salesperson}
+                  onChange={(e) => {
+                    if (e.target.value === "__CUSTOM__") {
+                      setIsCustomSalesperson(true);
+                      setSalesperson("");
+                    } else {
+                      setSalesperson(e.target.value);
+                    }
+                  }}
+                >
+                  <option value="">— Select Salesperson —</option>
+                  {salesOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">➕ + Enter Custom Salesperson...</option>
+                </select>
+              )}
             </div>
           )}
 
