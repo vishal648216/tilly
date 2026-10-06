@@ -553,7 +553,7 @@ export default function NewInvoiceForm({
           </span>
         </h2>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Party Selector */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-1">
@@ -599,23 +599,10 @@ export default function NewInvoiceForm({
               required
             />
           </div>
-
-          {/* Due Date */}
-          <div>
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Payment Due Date
-            </label>
-            <input
-              type="date"
-              className="input mt-1 w-full"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-          </div>
         </div>
 
         {/* Extended Fields: Warehouse, Reference, Supplier Bill */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 pt-2">
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isPurchase ? "lg:grid-cols-4" : "lg:grid-cols-3"} pt-2`}>
           {isPurchase ? (
             <>
               <div>
@@ -639,28 +626,16 @@ export default function NewInvoiceForm({
               </div>
             </>
           ) : (
-            <>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Place of Supply (State)</label>
-                <input
-                  type="text"
-                  placeholder="State name"
-                  className="input mt-1 w-full"
-                  value={placeOfSupply}
-                  onChange={(e) => setPlaceOfSupply(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Salesperson</label>
-                <input
-                  type="text"
-                  placeholder="Agent / Sales rep"
-                  className="input mt-1 w-full"
-                  value={salesperson}
-                  onChange={(e) => setSalesperson(e.target.value)}
-                />
-              </div>
-            </>
+            <div>
+              <label className="text-xs font-semibold text-slate-700">Salesperson</label>
+              <input
+                type="text"
+                placeholder="Agent / Sales rep"
+                className="input mt-1 w-full"
+                value={salesperson}
+                onChange={(e) => setSalesperson(e.target.value)}
+              />
+            </div>
           )}
 
           <div>
