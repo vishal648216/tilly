@@ -621,8 +621,8 @@ export default function NewInvoiceForm({
           </div>
         </div>
 
-        {/* Extended Fields: Warehouse, Reference, Supplier Bill */}
-        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isPurchase ? "lg:grid-cols-4" : "lg:grid-cols-3"} pt-2`}>
+        {/* Extended Fields: Reference, Supplier Bill */}
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isPurchase ? "lg:grid-cols-3" : "lg:grid-cols-2"} pt-2`}>
           {isPurchase ? (
             <>
               <div>
@@ -707,21 +707,6 @@ export default function NewInvoiceForm({
               )}
             </div>
           )}
-
-          <div>
-            <label className="text-xs font-semibold text-slate-700">Receiving / Shipping Warehouse</label>
-            <select
-              className="input mt-1 w-full"
-              value={warehouseId}
-              onChange={(e) => setWarehouseId(e.target.value)}
-            >
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name} {w.isDefault ? "(Main Store)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
 
           <div>
             <label className="text-xs font-semibold text-slate-700">
