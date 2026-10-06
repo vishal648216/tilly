@@ -237,8 +237,8 @@ export default function NewInvoiceForm({
 
     for (const l of lines) {
       const baseAmt = roundTo2(Number(l.qty || 0) * Number(l.rate || 0));
-      const lineDisc = roundTo2(Number(l.discount || 0));
-      const taxable = Math.max(0, roundTo2(baseAmt - lineDisc));
+      const lineDiscAmt = roundTo2((baseAmt * Number(l.discount || 0)) / 100);
+      const taxable = Math.max(0, roundTo2(baseAmt - lineDiscAmt));
       const gst = roundTo2((taxable * Number(l.gstRate || 0)) / 100);
 
       subTotal += taxable;
@@ -483,18 +483,22 @@ export default function NewInvoiceForm({
           purchaseOrderId: initialData?.purchaseOrderId || null,
           goodsReceiptId: initialData?.goodsReceiptId || null,
           skipStockMovement: Boolean(initialData?.skipStockMovement),
-          lines: validLines.map((l) => ({
-            itemId: l.itemId || undefined,
-            name: l.name,
-            sku: l.sku || undefined,
-            barcode: l.barcode || undefined,
-            unit: l.unit || "PCS",
-            hsn: l.hsn || undefined,
-            qty: Number(l.qty),
-            rate: Number(l.rate),
-            discount: Number(l.discount || 0),
-            gstRate: Number(l.gstRate),
-          })),
+          lines: validLines.map((l) => {
+            const base = roundTo2(Number(l.qty) * Number(l.rate));
+            const discAmt = roundTo2((base * Number(l.discount || 0)) / 100);
+            return {
+              itemId: l.itemId || undefined,
+              name: l.name,
+              sku: l.sku || undefined,
+              barcode: l.barcode || undefined,
+              unit: l.unit || "PCS",
+              hsn: l.hsn || undefined,
+              qty: Number(l.qty),
+              rate: Number(l.rate),
+              discount: discAmt,
+              gstRate: Number(l.gstRate),
+            };
+          }),
         }),
       });
 
@@ -784,7 +788,7 @@ export default function NewInvoiceForm({
                 <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
                 <th className="px-3 py-2 font-medium w-20">Unit</th>
                 <th className="px-3 py-2 text-right font-medium w-28">Rate (₹)</th>
-                <th className="px-3 py-2 text-right font-medium w-24">Disc (₹)</th>
+                <th className="px-3 py-2 text-right font-medium w-24">Disc (%)</th>
                 <th className="px-3 py-2 text-right font-medium w-20">GST %</th>
                 <th className="px-3 py-2 text-right font-medium w-28">Taxable (₹)</th>
                 <th className="px-3 py-2 text-right font-medium w-28">Total (₹)</th>
@@ -794,8 +798,8 @@ export default function NewInvoiceForm({
             <tbody className="divide-y divide-slate-100">
               {lines.map((line) => {
                 const baseAmt = roundTo2(Number(line.qty || 0) * Number(line.rate || 0));
-                const lineDisc = roundTo2(Number(line.discount || 0));
-                const taxable = Math.max(0, roundTo2(baseAmt - lineDisc));
+                const lineDiscAmt = roundTo2((baseAmt * Number(line.discount || 0)) / 100);
+                const taxable = Math.max(0, roundTo2(baseAmt - lineDiscAmt));
                 const lineGst = roundTo2((taxable * Number(line.gstRate || 0)) / 100);
                 const lineTotal = roundTo2(taxable + lineGst);
 
@@ -891,18 +895,30 @@ export default function NewInvoiceForm({
                       />
                     </td>
 
-                    {/* Line Discount */}
+                    {/* Line Discount % */}
                     <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input w-full text-right text-xs font-mono"
-                        value={line.discount || ""}
-                        onChange={(e) =>
-                          updateLine(line.key, "discount", parseFloat(e.target.value) || 0)
-                        }
-                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="0"
+                          className="input w-full text-right text-xs font-mono pr-5"
+                          value={line.discount || ""}
+                          onChange={(e) =>
+                            updateLine(line.key, "discount", parseFloat(e.target.value) || 0)
+                          }
+                        />
+                        <span className="absolute right-2 top-2 text-[11px] text-slate-400 font-bold pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                      {Number(line.discount) > 0 && (
+                        <div className="text-[10px] text-right text-emerald-600 font-mono mt-0.5">
+                          -₹{lineDiscAmt.toFixed(2)}
+                        </div>
+                      )}
                     </td>
 
                     {/* GST % */}

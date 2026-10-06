@@ -141,8 +141,9 @@ export default function NewPurchaseOrderForm({
   const computedLines = useMemo(() => {
     return lines.map((l) => {
       const gross = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      const discount = Number(l.discount) || 0;
-      const taxable = Math.max(0, gross - discount);
+      const discountPercent = Number(l.discount) || 0;
+      const discountAmt = roundTo2((gross * discountPercent) / 100);
+      const taxable = Math.max(0, gross - discountAmt);
       const gstRate = Number(l.gstRate) || 0;
 
       let cgst = 0;
@@ -164,6 +165,7 @@ export default function NewPurchaseOrderForm({
 
       return {
         ...l,
+        discountAmt,
         taxable: roundTo2(taxable),
         cgst,
         sgst,
@@ -175,7 +177,7 @@ export default function NewPurchaseOrderForm({
   }, [lines, isInterState]);
 
   const subTotal = roundTo2(computedLines.reduce((acc, l) => acc + l.taxable, 0));
-  const totalDiscount = roundTo2(lines.reduce((acc, l) => acc + (Number(l.discount) || 0), 0));
+  const totalDiscount = roundTo2(computedLines.reduce((acc, l) => acc + l.discountAmt, 0));
   const totalTax = roundTo2(computedLines.reduce((acc, l) => acc + l.taxAmount, 0));
   const grandTotal = roundTo2(subTotal + totalTax);
 
@@ -206,17 +208,21 @@ export default function NewPurchaseOrderForm({
         terms: terms.trim() || undefined,
         status: "CONFIRMED",
         isInterState,
-        items: validLines.map((l) => ({
-          itemId: l.itemId || undefined,
-          name: l.name.trim(),
-          sku: l.sku?.trim() || undefined,
-          unit: l.unit || "PCS",
-          hsn: l.hsn?.trim() || undefined,
-          qty: Number(l.qty),
-          rate: Number(l.rate),
-          discount: Number(l.discount || 0),
-          gstRate: Number(l.gstRate || 0),
-        })),
+        items: validLines.map((l) => {
+          const gross = Number(l.qty) * Number(l.rate);
+          const discAmt = roundTo2((gross * Number(l.discount || 0)) / 100);
+          return {
+            itemId: l.itemId || undefined,
+            name: l.name.trim(),
+            sku: l.sku?.trim() || undefined,
+            unit: l.unit || "PCS",
+            hsn: l.hsn?.trim() || undefined,
+            qty: Number(l.qty),
+            rate: Number(l.rate),
+            discount: discAmt,
+            gstRate: Number(l.gstRate || 0),
+          };
+        }),
       };
 
       const res = await fetch("/api/purchase-orders", {
@@ -368,7 +374,7 @@ export default function NewPurchaseOrderForm({
                 <th className="py-2.5 px-3 w-20 text-right">Qty</th>
                 <th className="py-2.5 px-3 w-20">Unit</th>
                 <th className="py-2.5 px-3 w-28 text-right">Purchase Rate (₹)</th>
-                <th className="py-2.5 px-3 w-20 text-right">Disc (₹)</th>
+                <th className="py-2.5 px-3 w-20 text-right">Disc (%)</th>
                 <th className="py-2.5 px-3 w-24 text-center">GST %</th>
                 <th className="py-2.5 px-3 w-28 text-right">Taxable</th>
                 <th className="py-2.5 px-3 w-28 text-right">Total (₹)</th>
