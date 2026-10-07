@@ -125,6 +125,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid invoice date provided." }, { status: 400 });
     }
 
+    const currentYear = new Date().getFullYear();
+    let cleanOrderNo = orderNo && typeof orderNo === "string" ? String(orderNo).trim().toUpperCase() : undefined;
+
+    if (cleanOrderNo) {
+      const poPattern = /^PO-(\d{4})-(\d{3,})$/i;
+      const match = cleanOrderNo.match(poPattern);
+      if (!match) {
+        return NextResponse.json(
+          {
+            error: `Invalid Order Ref format: "${cleanOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). Format change nahi hona chahiye.`,
+          },
+          { status: 400 }
+        );
+      }
+      const poYear = parseInt(match[1], 10);
+      if (poYear !== currentYear) {
+        return NextResponse.json(
+          {
+            error: `Year in PO number must be current year (${currentYear}). Year ${poYear} allow nahi hai.`,
+          },
+          { status: 400 }
+        );
+      }
+      const existing = await prisma.invoice.findFirst({
+        where: {
+          companyId,
+          orderNo: { equals: cleanOrderNo },
+          status: { notIn: ["CANCELLED", "REVERSED"] },
+        },
+        select: { id: true, invoiceNo: true },
+      });
+      if (existing) {
+        return NextResponse.json(
+          {
+            error: `Order Reference "${cleanOrderNo}" pehle se hi invoice ${existing.invoiceNo} me exist karta hai! Duplicate number allow nahi hai.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const invoice = await createInvoice({
       companyId,
       type: invoiceType,
@@ -141,7 +182,7 @@ export async function POST(req: Request) {
       placeOfSupply: placeOfSupply ? String(placeOfSupply).trim() : undefined,
       salesperson: salesperson ? String(salesperson).trim() : undefined,
       warehouseId: warehouseId || undefined,
-      orderNo: orderNo ? String(orderNo).trim() : undefined,
+      orderNo: cleanOrderNo,
       paymentTerms: paymentTerms ? String(paymentTerms).trim() : undefined,
       discount: discount ? Number(discount) : 0,
       freight: freight ? Number(freight) : 0,

@@ -111,6 +111,7 @@ export default function NewInvoiceForm({
   invoiceType = "SALES",
   initialData,
   salespersons = [],
+  existingOrderNos = [],
 }: {
   parties: Party[];
   items: any[];
@@ -119,9 +120,58 @@ export default function NewInvoiceForm({
   invoiceType?: "SALES" | "PURCHASE";
   initialData?: InitialWorkflowData | null;
   salespersons?: string[];
+  existingOrderNos?: string[];
 }) {
   const router = useRouter();
   const isPurchase = invoiceType === "PURCHASE";
+  const currentYear = new Date().getFullYear();
+
+  function computeNextPo(orderList: string[]): string {
+    const yr = new Date().getFullYear();
+    let max = 0;
+    for (const no of orderList) {
+      if (!no) continue;
+      const clean = no.trim().toUpperCase();
+      const match = clean.match(/^PO-(\d{4})-(\d+)$/);
+      if (match && parseInt(match[1], 10) === yr) {
+        const seq = parseInt(match[2], 10);
+        if (seq > max) max = seq;
+      }
+    }
+    return `PO-${yr}-${String(max + 1).padStart(3, "0")}`;
+  }
+
+  function validatePoNumber(val: string, orderList: string[]): { isValid: boolean; error: string } {
+    const clean = val.trim().toUpperCase();
+    if (!clean) {
+      return { isValid: false, error: "Customer PO / Order Ref is required." };
+    }
+    const yr = new Date().getFullYear();
+    const match = clean.match(/^PO-(\d{4})-(\d{3,})$/i);
+    if (!match) {
+      return {
+        isValid: false,
+        error: `Format must be PO-YYYY-XXX (e.g. PO-${yr}-001). Format change nahi hona chahiye.`,
+      };
+    }
+    const enteredYear = parseInt(match[1], 10);
+    if (enteredYear !== yr) {
+      return {
+        isValid: false,
+        error: `Year in PO number must be current year (${yr}). Year ${enteredYear} allow nahi hai.`,
+      };
+    }
+    const isDup = orderList.some(
+      (existing) => existing && existing.trim().toUpperCase() === clean
+    );
+    if (isDup) {
+      return {
+        isValid: false,
+        error: `PO Reference "${clean}" pehle se hi exist karta hai! Duplicate number allow nahi hai.`,
+      };
+    }
+    return { isValid: true, error: "" };
+  }
 
   const defaultSalesReps = [
     "Direct / Counter Sales",
@@ -145,9 +195,26 @@ export default function NewInvoiceForm({
   const [warehouseId, setWarehouseId] = useState(
     initialData?.warehouseId || warehouses.find((w) => w.isDefault)?.id || warehouses[0]?.id || ""
   );
-  const [orderNo, setOrderNo] = useState(initialData?.orderNo || "");
+  const [existingOrderNosList, setExistingOrderNosList] = useState<string[]>(existingOrderNos);
+  const [orderNo, setOrderNo] = useState(
+    initialData?.orderNo || computeNextPo(existingOrderNos)
+  );
+  const [orderNoError, setOrderNoError] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("Immediate");
   const [notes, setNotes] = useState(initialData?.notes || "");
+
+  function handleOrderNoChange(val: string) {
+    const clean = val.toUpperCase();
+    setOrderNo(clean);
+    const result = validatePoNumber(clean, existingOrderNosList);
+    setOrderNoError(result.isValid ? "" : result.error);
+  }
+
+  function handleRegeneratePoNumber() {
+    const nextVal = computeNextPo(existingOrderNosList);
+    setOrderNo(nextVal);
+    setOrderNoError("");
+  }
 
   // Purchase Specific Fields
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState("");
@@ -481,6 +548,15 @@ export default function NewInvoiceForm({
       return;
     }
 
+    if (orderNo) {
+      const poCheck = validatePoNumber(orderNo, existingOrderNosList);
+      if (!poCheck.isValid) {
+        setOrderNoError(poCheck.error);
+        setError(poCheck.error);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/invoices", {
@@ -498,7 +574,7 @@ export default function NewInvoiceForm({
           shippingAddress: !isPurchase ? shippingAddress : null,
           placeOfSupply: placeOfSupply || null,
           salesperson: !isPurchase ? salesperson : null,
-          orderNo: orderNo || null,
+          orderNo: orderNo ? orderNo.trim().toUpperCase() : null,
           paymentTerms: paymentTerms || null,
           discount: Number(discountTotal || 0),
           freight: Number(freightTotal || 0),
@@ -548,7 +624,10 @@ export default function NewInvoiceForm({
         );
         setLines([{ ...emptyLine, key: Date.now() }]);
         setSupplierInvoiceNo("");
-        setOrderNo("");
+        const nextOrderList = [...existingOrderNosList, orderNo.trim().toUpperCase()];
+        setExistingOrderNosList(nextOrderList);
+        setOrderNo(computeNextPo(nextOrderList));
+        setOrderNoError("");
         setPaidAmount(0);
         setDiscountTotal(0);
         setFreightTotal(0);
@@ -750,16 +829,40 @@ export default function NewInvoiceForm({
           )}
 
           <div>
-            <label className="text-xs font-semibold text-slate-700">
-              {isPurchase ? "Purchase Order / PO #" : "Customer PO / Order Ref"}
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">
+                {isPurchase ? "Purchase Order / PO #" : "Customer PO / Order Ref"}
+              </label>
+              <button
+                type="button"
+                onClick={handleRegeneratePoNumber}
+                className="text-[11px] text-brand-600 hover:text-brand-700 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                title="Regenerate next unique PO number"
+              >
+                <span>⚡ Auto-Generate</span>
+              </button>
+            </div>
             <input
               type="text"
-              placeholder="e.g. PO-2026-004"
-              className="input mt-1 w-full font-mono"
+              placeholder={`e.g. PO-${currentYear}-001`}
+              className={`input mt-1 w-full font-mono uppercase text-xs ${
+                orderNoError
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50/20 text-red-900"
+                  : "border-slate-200 focus:border-emerald-500 text-slate-900"
+              }`}
               value={orderNo}
-              onChange={(e) => setOrderNo(e.target.value)}
+              onChange={(e) => handleOrderNoChange(e.target.value)}
             />
+            {orderNoError ? (
+              <p className="mt-1 text-[11px] font-semibold text-red-600 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                <span>{orderNoError}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-400">
+                Format: <span className="font-mono font-medium text-slate-600">PO-{currentYear}-XXX</span> (Unique for {currentYear})
+              </p>
+            )}
           </div>
         </div>
 

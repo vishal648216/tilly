@@ -163,6 +163,38 @@ export async function createInvoice(input: CreateInvoiceInput) {
     }
   }
 
+  // 2b. ORDER REFERENCE (PO NUMBER) VALIDATION & DUPLICATE CONTROL
+  let finalOrderNo = orderNo ? String(orderNo).trim().toUpperCase() : undefined;
+  if (finalOrderNo) {
+    const currentYear = new Date().getFullYear();
+    const poPattern = /^PO-(\d{4})-(\d{3,})$/i;
+    const match = finalOrderNo.match(poPattern);
+    if (!match) {
+      throw new Error(
+        `Invalid Order Ref format: "${finalOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). Format change nahi hona chahiye.`
+      );
+    }
+    const poYear = parseInt(match[1], 10);
+    if (poYear !== currentYear) {
+      throw new Error(
+        `Year in PO number must be current year (${currentYear}). Year ${poYear} allow nahi hai.`
+      );
+    }
+    const existingDuplicateOrder = await prisma.invoice.findFirst({
+      where: {
+        companyId,
+        orderNo: { equals: finalOrderNo },
+        status: { notIn: ["CANCELLED", "REVERSED"] },
+      },
+      select: { invoiceNo: true },
+    });
+    if (existingDuplicateOrder) {
+      throw new Error(
+        `Order Reference "${finalOrderNo}" pehle se hi invoice ${existingDuplicateOrder.invoiceNo} me exist karta hai! Duplicate number allow nahi hai.`
+      );
+    }
+  }
+
   // 3. RESOLVE WAREHOUSE
   let warehouseId = input.warehouseId || null;
   if (warehouseId) {
@@ -584,7 +616,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
         placeOfSupply: placeOfSupply || null,
         salesperson: salesperson || null,
         warehouseId,
-        orderNo: orderNo || null,
+        orderNo: finalOrderNo || null,
         paymentTerms: paymentTerms || null,
         subTotal: new Decimal(taxableBeforeGst),
         discount: new Decimal(overallDiscount),
