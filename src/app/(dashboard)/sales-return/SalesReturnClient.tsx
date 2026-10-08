@@ -12,10 +12,13 @@ import {
   FileText,
   Calendar,
   Eye,
+  Edit,
+  Trash2,
   CheckCircle2,
   TrendingDown,
   Package,
 } from "lucide-react";
+import TwoStepDeleteModal from "@/components/TwoStepDeleteModal";
 
 interface CreditNote {
   id: string;
@@ -36,11 +39,23 @@ interface CreditNote {
 }
 
 export default function SalesReturnClient({
-  returns,
+  returns: initialReturns,
 }: {
   returns: CreditNote[];
 }) {
+  const [returns, setReturns] = useState<CreditNote[]>(initialReturns);
   const [searchTerm, setSearchTerm] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<CreditNote | null>(null);
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/invoices/${deleteTarget.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to delete credit note");
+
+    setReturns((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+    setDeleteTarget(null);
+  }
 
   const filtered = returns.filter((r) => {
     const matchSearch =
@@ -257,13 +272,33 @@ export default function SalesReturnClient({
                         {cn.notes || "Goods Return"}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Link
-                          href={`/invoices/${cn.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                        >
-                          <Eye className="h-3.5 w-3.5 text-slate-500" />
-                          View / Print
-                        </Link>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/invoices/${cn.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                            title="View / Print Bill"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
+                            <span>View</span>
+                          </Link>
+                          <Link
+                            href={`/invoices/${cn.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 hover:border-indigo-200 transition"
+                            title="Edit / Update Bill"
+                          >
+                            <Edit className="h-3.5 w-3.5 text-indigo-500" />
+                            <span>Edit</span>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(cn)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 hover:border-red-300 transition"
+                            title="Delete Bill (Requires 2 confirmations)"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -273,6 +308,23 @@ export default function SalesReturnClient({
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <TwoStepDeleteModal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Credit Note"
+          itemIdentifier={`#${deleteTarget.invoiceNo}`}
+          itemTypeLabel="Credit Note"
+          itemDetails={[
+            { label: "Customer", value: deleteTarget.party?.name || "Cash Customer" },
+            { label: "Grand Total", value: formatCurrency(deleteTarget.grandTotal) },
+            { label: "Date", value: new Date(deleteTarget.date).toLocaleDateString("en-IN") },
+            { label: "Status", value: deleteTarget.status },
+          ]}
+        />
+      )}
     </div>
   );
 }

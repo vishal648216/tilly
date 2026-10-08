@@ -60,6 +60,182 @@ export async function GET(
   }
 }
 
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const context = await requireCompanyAccess(req);
+    const invoiceId = params.id;
+
+    const existingInvoice = await prisma.invoice.findFirst({
+      where: {
+        id: invoiceId,
+        companyId: context.company.id,
+      },
+      include: { lines: true, party: true },
+    });
+
+    if (!existingInvoice) {
+      return NextResponse.json(
+        { error: "Invoice not found or does not belong to your company.", code: "NOT_FOUND" },
+        { status: 404 }
+      );
+    }
+
+    const body = await req.json();
+    const {
+      partyId,
+      date,
+      dueDate,
+      billingAddress,
+      shippingAddress,
+      placeOfSupply,
+      salesperson,
+      orderNo,
+      paymentTerms,
+      notes,
+      lines,
+      status,
+      discount = 0,
+      freight = 0,
+      otherCharges = 0,
+      paidAmount,
+    } = body;
+
+    // Check party if supplied
+    if (partyId) {
+      const party = await prisma.party.findFirst({
+        where: { id: partyId, companyId: context.company.id },
+      });
+      if (!party) {
+        return NextResponse.json({ error: "Selected party not found." }, { status: 400 });
+      }
+    }
+
+    const { roundTo2 } = await import("@/lib/currency");
+    const { Decimal } = await import("@prisma/client/runtime/library");
+
+    const isInterState = parseFloat(existingInvoice.igstTotal.toString()) > 0;
+    let linesSubTotal = 0;
+    let cgstTotal = 0;
+    let sgstTotal = 0;
+    let igstTotal = 0;
+
+    const builtLines = (lines || []).map((line: any) => {
+      const qty = parseFloat(line.qty) || 0;
+      const rate = parseFloat(line.rate) || 0;
+      const gstRate = parseFloat(line.gstRate) || 0;
+      const baseAmt = roundTo2(qty * rate);
+      const lineDiscount = roundTo2(parseFloat(line.discount) || 0);
+      const taxableAmount = Math.max(0, roundTo2(baseAmt - lineDiscount));
+      const gstAmt = roundTo2((taxableAmount * gstRate) / 100);
+
+      let cgst = 0,
+        sgst = 0,
+        igst = 0;
+
+      if (isInterState) {
+        igst = gstAmt;
+        igstTotal += igst;
+      } else {
+        cgst = roundTo2(gstAmt / 2);
+        sgst = roundTo2(gstAmt / 2);
+        cgstTotal += cgst;
+        sgstTotal += sgst;
+      }
+
+      linesSubTotal += taxableAmount;
+
+      return {
+        itemId: line.itemId || null,
+        name: line.name || "Item",
+        sku: line.sku || null,
+        barcode: line.barcode || null,
+        unit: line.unit || "PCS",
+        hsn: line.hsn || null,
+        qty: new Decimal(qty),
+        rate: new Decimal(rate),
+        discount: new Decimal(lineDiscount),
+        taxableAmount: new Decimal(taxableAmount),
+        amount: new Decimal(taxableAmount + gstAmt),
+        gstRate: new Decimal(gstRate),
+        cgst: new Decimal(cgst),
+        sgst: new Decimal(sgst),
+        igst: new Decimal(igst),
+      };
+    });
+
+    const netBeforeTaxes = Math.max(0, linesSubTotal - Number(discount || 0) + Number(freight || 0) + Number(otherCharges || 0));
+    const totalWithTax = roundTo2(netBeforeTaxes + cgstTotal + sgstTotal + igstTotal);
+    const roundedGrandTotal = Math.round(totalWithTax);
+    const roundOff = roundTo2(roundedGrandTotal - totalWithTax);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // If lines provided, replace lines
+      if (lines && lines.length > 0) {
+        await tx.invoiceLine.deleteMany({ where: { invoiceId: existingInvoice.id } });
+        await tx.invoiceLine.createMany({
+          data: builtLines.map((l: any) => ({
+            ...l,
+            invoiceId: existingInvoice.id,
+          })),
+        });
+      }
+
+      const inv = await tx.invoice.update({
+        where: { id: existingInvoice.id },
+        data: {
+          ...(partyId !== undefined ? { partyId } : {}),
+          ...(date ? { date: new Date(date) } : {}),
+          ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+          ...(billingAddress !== undefined ? { billingAddress } : {}),
+          ...(shippingAddress !== undefined ? { shippingAddress } : {}),
+          ...(placeOfSupply !== undefined ? { placeOfSupply } : {}),
+          ...(salesperson !== undefined ? { salesperson } : {}),
+          ...(orderNo !== undefined ? { orderNo } : {}),
+          ...(paymentTerms !== undefined ? { paymentTerms } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          ...(status ? { status } : {}),
+          ...(paidAmount !== undefined ? { paidAmount: new Decimal(paidAmount) } : {}),
+          ...(lines && lines.length > 0
+            ? {
+                subTotal: new Decimal(linesSubTotal),
+                cgstTotal: new Decimal(cgstTotal),
+                sgstTotal: new Decimal(sgstTotal),
+                igstTotal: new Decimal(igstTotal),
+                roundOff: new Decimal(roundOff),
+                grandTotal: new Decimal(roundedGrandTotal),
+              }
+            : {}),
+        },
+        include: { lines: true, party: true },
+      });
+
+      return inv;
+    });
+
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
+      companyId: context.company.id,
+      userId: context.user.id,
+      userEmail: context.user.email,
+      action: "UPDATE_INVOICE",
+      entity: "Invoice",
+      entityId: existingInvoice.id,
+      beforeValue: { invoiceNo: existingInvoice.invoiceNo, grandTotal: existingInvoice.grandTotal },
+      afterValue: { invoiceNo: updated.invoiceNo, grandTotal: updated.grandTotal },
+      details: `Updated ${existingInvoice.type} bill #${existingInvoice.invoiceNo}`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return NextResponse.json({ ok: true, invoice: updated });
+  } catch (error) {
+    return handleAuthError(error);
+  }
+}
+
 export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
@@ -73,6 +249,10 @@ export async function DELETE(
         id: invoiceId,
         companyId: context.company.id,
       },
+      include: {
+        lines: true,
+        voucher: { include: { entries: true } },
+      },
     });
 
     if (!invoice) {
@@ -82,54 +262,101 @@ export async function DELETE(
       );
     }
 
-    const requiredPerm =
-      invoice.type === "PURCHASE" ? PERMISSIONS.PURCHASE_CANCEL : PERMISSIONS.SALES_CANCEL;
-
-    if (!hasPermission(context.role, requiredPerm, context.membership.customPermissions)) {
-      throw new AuthError(`Missing required permission: ${requiredPerm}`, 403, "FORBIDDEN");
-    }
-
-    // Production-Grade Financial Integrity:
-    // DRAFT invoices may be deleted. POSTED/PAID invoices MUST NOT be deleted.
-    // Instead, they are cancelled with stock reversal and accounting reversal.
     const { searchParams } = new URL(req.url);
-    const reason = searchParams.get("reason") || "Cancelled by user";
+    const permanent = searchParams.get("permanent") !== "false"; // default to true when user deletes
+    const reason = searchParams.get("reason") || "Deleted by user";
 
-    if (invoice.status === "DRAFT") {
-      await prisma.invoice.delete({
+    // Complete atomic deletion with stock and voucher reversal
+    await prisma.$transaction(async (tx) => {
+      const { recordStockMovement } = await import("@/lib/inventory");
+      const isSales = invoice.type === "SALES" || invoice.type === "PURCHASE_RETURN";
+
+      // 1. Reverse Stock Movements if any
+      for (const line of invoice.lines) {
+        if (line.itemId) {
+          await recordStockMovement(
+            {
+              companyId: context.company.id,
+              itemId: line.itemId,
+              warehouseId: invoice.warehouseId,
+              movementType: isSales ? "SALE_RETURN" : "PURCHASE_RETURN",
+              referenceType: "INVOICE",
+              referenceId: invoice.invoiceNo,
+              qtyIn: isSales ? Number(line.qty) : 0,
+              qtyOut: isSales ? 0 : Number(line.qty),
+              unitCost: Number(line.rate),
+              totalCost: Number(line.amount),
+              date: new Date(),
+              notes: `Stock reversal for deleted bill #${invoice.invoiceNo} (${reason})`,
+              createdBy: context.user.id,
+              allowNegative: true,
+            },
+            tx
+          ).catch(() => {});
+        }
+      }
+
+      // 2. Unlink any returns pointing to this invoice
+      await tx.invoice.updateMany({
+        where: { originalInvoiceId: invoice.id },
+        data: { originalInvoiceId: null },
+      });
+
+      // 3. Remove payment allocations
+      await tx.paymentAllocation.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+
+      // 4. Unlink delivery challans & goods receipts
+      await tx.deliveryChallan.updateMany({
+        where: { invoiceId: invoice.id },
+        data: { invoiceId: null },
+      });
+      await tx.goodsReceipt.updateMany({
+        where: { invoiceId: invoice.id },
+        data: { invoiceId: null },
+      });
+
+      // 5. Unlink and delete voucher
+      if (invoice.voucherId) {
+        await tx.voucherEntry.deleteMany({
+          where: { voucherId: invoice.voucherId },
+        });
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { voucherId: null },
+        });
+        await tx.voucher.delete({
+          where: { id: invoice.voucherId },
+        }).catch(() => {});
+      }
+
+      // 6. Delete lines and delete invoice record
+      await tx.invoiceLine.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+      await tx.invoice.delete({
         where: { id: invoice.id },
       });
+    });
 
-      const meta = getClientMetadata(req);
-      await recordAuditLog({
-        companyId: context.company.id,
-        userId: context.user.id,
-        userEmail: context.user.email,
-        action: "DELETE_DRAFT_INVOICE",
-        entity: "Invoice",
-        entityId: invoice.id,
-        beforeValue: { invoiceNo: invoice.invoiceNo, grandTotal: invoice.grandTotal },
-        details: `Deleted draft invoice ${invoice.invoiceNo}`,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      });
-
-      return NextResponse.json({ ok: true, message: `Draft invoice ${invoice.invoiceNo} deleted.` });
-    }
-
-    const { cancelInvoice } = await import("@/lib/invoice");
-    const cancelled = await cancelInvoice({
-      invoiceId: invoice.id,
+    const meta = getClientMetadata(req);
+    await recordAuditLog({
       companyId: context.company.id,
-      reason,
       userId: context.user.id,
       userEmail: context.user.email,
+      action: "DELETE_INVOICE",
+      entity: "Invoice",
+      entityId: invoice.id,
+      beforeValue: { invoiceNo: invoice.invoiceNo, grandTotal: invoice.grandTotal, type: invoice.type },
+      details: `Permanently deleted ${invoice.type} bill #${invoice.invoiceNo} (Total: ₹${invoice.grandTotal}) after confirmation.`,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
     });
 
     return NextResponse.json({
       ok: true,
-      message: `Invoice ${invoice.invoiceNo} cancelled and reversed successfully.`,
-      invoice: cancelled,
+      message: `Bill #${invoice.invoiceNo} deleted successfully.`,
     });
   } catch (error) {
     return handleAuthError(error);

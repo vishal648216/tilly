@@ -13,8 +13,12 @@ import {
   Printer,
   PackageMinus,
   CheckCircle2,
+  Eye,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
+import TwoStepDeleteModal from "@/components/TwoStepDeleteModal";
 
 interface PurchaseReturnItem {
   id: string;
@@ -44,8 +48,19 @@ export default function PurchaseReturnClient({
 }: {
   initialReturns: PurchaseReturnItem[];
 }) {
-  const [returns] = useState<PurchaseReturnItem[]>(initialReturns);
+  const [returns, setReturns] = useState<PurchaseReturnItem[]>(initialReturns);
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseReturnItem | null>(null);
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/invoices/${deleteTarget.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to delete debit note");
+
+    setReturns((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+    setDeleteTarget(null);
+  }
 
   const filtered = returns.filter((r) => {
     const s = search.toLowerCase();
@@ -221,13 +236,33 @@ export default function PurchaseReturnClient({
                       </span>
                     </td>
                     <td className="px-5 py-4 text-center">
-                      <Link
-                        href={`/invoices/${r.id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors"
-                      >
-                        <Printer className="h-3.5 w-3.5" />
-                        <span>View / Print</span>
-                      </Link>
+                      <div className="inline-flex items-center justify-center gap-1.5">
+                        <Link
+                          href={`/invoices/${r.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                          title="View / Print Debit Note"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" />
+                          <span>View</span>
+                        </Link>
+                        <Link
+                          href={`/invoices/${r.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:border-rose-200 transition"
+                          title="Edit / Update Debit Note"
+                        >
+                          <Edit className="h-3.5 w-3.5 text-rose-500" />
+                          <span>Edit</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(r)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 hover:border-red-300 transition"
+                          title="Delete Debit Note (Requires 2 confirmations)"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -236,6 +271,23 @@ export default function PurchaseReturnClient({
           </table>
         </div>
       </div>
+
+      {deleteTarget && (
+        <TwoStepDeleteModal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Debit Note"
+          itemIdentifier={`#${deleteTarget.invoiceNo}`}
+          itemTypeLabel="Debit Note"
+          itemDetails={[
+            { label: "Vendor", value: deleteTarget.party?.name || "Direct Vendor" },
+            { label: "Grand Total", value: formatCurrency(deleteTarget.grandTotal) },
+            { label: "Date", value: new Date(deleteTarget.date).toLocaleDateString("en-IN") },
+            { label: "Status", value: deleteTarget.status },
+          ]}
+        />
+      )}
     </div>
   );
 }

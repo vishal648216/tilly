@@ -15,8 +15,11 @@ import {
   X,
   Loader2,
   ExternalLink,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import html2canvas from "html2canvas";
+import TwoStepDeleteModal from "@/components/TwoStepDeleteModal";
 
 export default function InvoiceActions({
   invoiceId,
@@ -40,6 +43,7 @@ export default function InvoiceActions({
   upiId?: string | null;
 }) {
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [generatingImg, setGeneratingImg] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedPublicLink, setCopiedPublicLink] = useState(false);
@@ -168,9 +172,26 @@ export default function InvoiceActions({
     ? `https://wa.me/${whatsappNumber}?text=${whatsappText}`
     : `https://wa.me/?text=${whatsappText}`;
 
+  async function handleDeleteConfirm() {
+    if (!invoiceId) return;
+    const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to delete bill");
+
+    const redirectUrl =
+      invoiceType === "SALES_RETURN"
+        ? "/sales-return"
+        : invoiceType === "PURCHASE_RETURN"
+        ? "/purchase-return"
+        : invoiceType === "PURCHASE"
+        ? "/purchases"
+        : "/invoices";
+    window.location.href = redirectUrl;
+  }
+
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {invoiceType === "SALES" && invoiceId && (
           <Link
             href={`/sales-return/new?invoiceId=${invoiceId}`}
@@ -189,6 +210,17 @@ export default function InvoiceActions({
           <MessageCircle className="h-4 w-4" /> WhatsApp Bill
         </a>
 
+        {invoiceId && (
+          <Link
+            href={`/invoices/${invoiceId}/edit`}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            title="Edit this bill and line items"
+          >
+            <Edit className="h-4 w-4 text-slate-500" />
+            <span>Edit</span>
+          </Link>
+        )}
+
         <button onClick={handlePrint} className="btn-primary text-sm flex items-center gap-2">
           <Printer className="h-4 w-4" /> Print / PDF
         </button>
@@ -199,6 +231,17 @@ export default function InvoiceActions({
         >
           <Share2 className="h-4 w-4" /> Share
         </button>
+
+        {invoiceId && (
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm font-semibold text-rose-700 shadow-2xs hover:bg-rose-100 transition-colors"
+            title="Delete this bill permanently"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </button>
+        )}
       </div>
 
       {/* Share Modal Dialog */}
@@ -372,6 +415,21 @@ export default function InvoiceActions({
           </div>
         </div>
       )}
+
+      {/* Two-Step Delete Modal */}
+      <TwoStepDeleteModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteConfirm}
+        title={`Delete ${docTypeName}`}
+        itemIdentifier={`#${invoiceNo}`}
+        itemTypeLabel={docTypeName}
+        itemDetails={[
+          { label: "Party", value: partyName || "Cash Customer" },
+          { label: "Total Amount", value: grandTotal ? formatCurrency(grandTotal) : "₹0" },
+          { label: "Status", value: status || "POSTED" },
+        ]}
+      />
     </>
   );
 }

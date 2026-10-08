@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/currency";
 import SearchBar from "@/components/SearchBar";
 import InvoicesExportButton from "./InvoicesExportButton";
+import InvoicesClient from "./InvoicesClient";
 import { Plus, Receipt, ShoppingCart, ArrowRight, UserPlus } from "lucide-react";
 
 export default async function InvoicesPage({
@@ -109,90 +110,19 @@ export default async function InvoicesPage({
         </Link>
       </div>
 
-      <div className="card overflow-hidden">
-        {invoices.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
-              <Receipt className="h-6 w-6" />
-            </div>
-            <p className="text-slate-700 font-semibold text-base">
-              {query ? `"${query}" ke liye koi result nahi mila.` : "Koi invoice nahi hai abhi."}
-            </p>
-            {query ? (
-              <Link href="/invoices" className="btn-secondary mt-4 inline-flex">
-                Clear search
-              </Link>
-            ) : (
-              <Link href="/invoices/new" className="btn-primary mt-4 inline-flex items-center gap-1.5">
-                <Plus className="h-4 w-4" /> Pehla invoice banao
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs sm:text-sm text-left">
-              <thead className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="px-5 py-3.5">Invoice #</th>
-                  <th className="px-5 py-3.5">Type</th>
-                  <th className="px-5 py-3.5">Party / Customer</th>
-                  <th className="px-5 py-3.5">Date</th>
-                  <th className="px-5 py-3.5 text-right">Grand Total</th>
-                  <th className="px-5 py-3.5 text-right">Paid Amount</th>
-                  <th className="px-5 py-3.5 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-3.5 font-bold font-mono text-emerald-700">
-                      <Link href={`/invoices/${inv.id}`}>{inv.invoiceNo}</Link>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`badge ${inv.type === "SALES" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
-                        {inv.type}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 font-semibold text-slate-900">{inv.party?.name ?? "Cash / Direct"}</td>
-                    <td className="px-5 py-3.5 text-slate-500 whitespace-nowrap">
-                      {new Date(inv.date).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
-                      })}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-black text-slate-900">
-                      {formatCurrency(inv.grandTotal)}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-semibold text-slate-600">
-                      {formatCurrency(inv.paidAmount)}
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <span className={`badge ${
-                        inv.status === "PAID"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : inv.status === "PARTIALLY_PAID" || inv.status === "PARTIAL"
-                          ? "bg-amber-100 text-amber-800"
-                          : inv.status === "DRAFT"
-                          ? "bg-slate-100 text-slate-700"
-                          : inv.status === "OVERDUE"
-                          ? "bg-red-100 text-red-800"
-                          : inv.status === "CANCELLED"
-                          ? "bg-rose-100 text-rose-800 line-through"
-                          : inv.status === "REVERSED"
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}>
-                        {inv.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <InvoicesClient
+        initialInvoices={invoices.map((i) => ({
+          id: i.id,
+          invoiceNo: i.invoiceNo,
+          type: i.type,
+          partyName: i.party?.name || "Cash / Direct",
+          date: i.date.toISOString(),
+          grandTotal: i.grandTotal.toString(),
+          paidAmount: i.paidAmount.toString(),
+          status: i.status,
+        }))}
+        query={query}
+      />
     </div>
   );
 }

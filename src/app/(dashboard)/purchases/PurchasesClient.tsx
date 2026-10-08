@@ -14,9 +14,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
+  Edit,
+  Trash2,
   PackageMinus,
   RotateCcw,
 } from "lucide-react";
+import TwoStepDeleteModal from "@/components/TwoStepDeleteModal";
 
 interface Invoice {
   id: string;
@@ -30,12 +33,24 @@ interface Invoice {
 }
 
 export default function PurchasesClient({
-  purchases,
+  purchases: initialPurchases,
 }: {
   purchases: Invoice[];
 }) {
+  const [purchases, setPurchases] = useState<Invoice[]>(initialPurchases);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/invoices/${deleteTarget.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to delete purchase bill");
+
+    setPurchases((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+    setDeleteTarget(null);
+  }
 
   const filtered = purchases.filter((p) => {
     const matchStatus = statusFilter === "ALL" || p.status === statusFilter;
@@ -253,20 +268,39 @@ export default function PurchasesClient({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Link
                             href={`/purchase-return/new?billId=${pur.id}`}
-                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
                             title="Return goods from this bill to vendor"
                           >
                             <RotateCcw className="h-3.5 w-3.5" /> Return
                           </Link>
+                          {/* View */}
                           <Link
                             href={`/invoices/${pur.id}`}
-                            className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                            title="View / Print Purchase Bill"
                           >
-                            <Eye className="h-3.5 w-3.5" /> View Bill
+                            <Eye className="h-4 w-4" />
                           </Link>
+                          {/* Edit */}
+                          <Link
+                            href={`/invoices/${pur.id}/edit`}
+                            className="p-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="Edit Purchase Bill"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Link>
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(pur)}
+                            className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete Purchase Bill"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -277,6 +311,23 @@ export default function PurchasesClient({
           </table>
         </div>
       </div>
+
+      {/* Two-Step Delete Modal */}
+      {deleteTarget && (
+        <TwoStepDeleteModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Purchase Bill"
+          itemIdentifier={`#${deleteTarget.invoiceNo}`}
+          itemTypeLabel="Purchase Bill"
+          itemDetails={[
+            { label: "Vendor", value: deleteTarget.party?.name || "Cash Vendor" },
+            { label: "Grand Total", value: formatCurrency(deleteTarget.grandTotal) },
+            { label: "Status", value: deleteTarget.status },
+          ]}
+        />
+      )}
     </div>
   );
 }
