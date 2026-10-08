@@ -22,7 +22,7 @@ export function isValidPhone(phone: string | null | undefined): boolean {
   } else if (digits.length === 11 && digits.startsWith("0")) {
     digits = digits.slice(1);
   }
-  return digits.length === 10;
+  return digits.length === 10 && /^[6-9]\d{9}$/.test(digits);
 }
 
 export function isValidGstin(gstin: string | null | undefined): boolean {
@@ -59,3 +59,52 @@ export function isValidHsn(hsn: string | null | undefined): boolean {
   const digits = hsn.replace(/[^0-9]/g, "");
   return HSN_REGEX.test(digits);
 }
+
+export function isValidIndianMobile(phone: string | null | undefined): boolean {
+  if (!phone || !phone.trim()) return false;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) {
+    digits = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  return digits.length === 10 && /^[6-9]\d{9}$/.test(digits);
+}
+
+export const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chandigarh",
+  "Chhattisgarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jammu and Kashmir",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Ladakh",
+  "Lakshadweep",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Puducherry",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+] as const;

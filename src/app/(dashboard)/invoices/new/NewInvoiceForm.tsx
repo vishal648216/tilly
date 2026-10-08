@@ -21,6 +21,7 @@ import {
   Truck,
   Percent,
 } from "lucide-react";
+import { isValidIndianMobile, isValidGstin, INDIAN_STATES } from "@/lib/validators";
 
 type Party = {
   id: string;
@@ -458,10 +459,50 @@ export default function NewInvoiceForm({
   async function handleQuickCreateParty(e: React.FormEvent) {
     e.preventDefault();
     setModalError("");
+
+    const partyRole = isPurchase ? "Vendor" : "Customer";
     const cleanName = newPartyData.name.trim();
-    if (!cleanName || cleanName.length < 2) {
-      setModalError("Party name must be at least 2 characters long.");
+    if (!cleanName) {
+      setModalError(`${partyRole} name is required.`);
       return;
+    }
+    if (cleanName.length < 2) {
+      setModalError(`${partyRole} name must be at least 2 characters long.`);
+      return;
+    }
+
+    const rawPhone = newPartyData.phone.trim();
+    if (!rawPhone) {
+      setModalError("Mobile number is required.");
+      return;
+    }
+    let digits = rawPhone.replace(/\D/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) {
+      digits = digits.slice(2);
+    } else if (digits.length === 11 && digits.startsWith("0")) {
+      digits = digits.slice(1);
+    }
+    if (digits.length !== 10) {
+      setModalError("Mobile number must be exactly 10 digits (e.g. 9876543210).");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(digits)) {
+      setModalError("Mobile number must start with 6, 7, 8, or 9.");
+      return;
+    }
+
+    const cleanState = newPartyData.state.trim();
+    if (!cleanState) {
+      setModalError("State is required. Please select or enter a valid state.");
+      return;
+    }
+
+    if (newPartyData.gstin && newPartyData.gstin.trim()) {
+      const cleanGstin = newPartyData.gstin.trim().toUpperCase();
+      if (!isValidGstin(cleanGstin)) {
+        setModalError("Invalid GSTIN format. Must be 15 alphanumeric characters (e.g. 27ABCDE1234F1Z5).");
+        return;
+      }
     }
 
     setModalLoading(true);
@@ -472,9 +513,9 @@ export default function NewInvoiceForm({
         body: JSON.stringify({
           name: cleanName,
           type: isPurchase ? "VENDOR" : "CUSTOMER",
-          phone: newPartyData.phone || null,
+          phone: digits,
           gstin: newPartyData.gstin ? newPartyData.gstin.trim().toUpperCase() : null,
-          state: newPartyData.state ? newPartyData.state.trim() : null,
+          state: cleanState,
           address: newPartyData.address ? newPartyData.address.trim() : null,
         }),
       });
@@ -485,7 +526,7 @@ export default function NewInvoiceForm({
       handlePartyChange(data.party.id);
       setShowAddPartyModal(false);
       setNewPartyData({ name: "", phone: "", gstin: "", state: companyState || "", address: "" });
-      setPartySuccessMsg(`${isPurchase ? "Vendor" : "Customer"} created and selected!`);
+      setPartySuccessMsg(`${partyRole} "${cleanName}" created and selected successfully!`);
       setTimeout(() => setPartySuccessMsg(""), 4000);
     } catch (err: any) {
       setModalError(err.message || "Failed to save party");
@@ -1397,76 +1438,138 @@ export default function NewInvoiceForm({
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddPartyModal(false)}
+                onClick={() => {
+                  setShowAddPartyModal(false);
+                  setModalError("");
+                }}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {modalError && (
-              <div className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-                {modalError}
-              </div>
-            )}
+            <form onSubmit={handleQuickCreateParty}>
+              {modalError && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 animate-in fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+                  <span>{modalError}</span>
+                </div>
+              )}
 
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Party Name *</label>
-                <input
-                  type="text"
-                  className="input mt-1 w-full"
-                  value={newPartyData.name}
-                  onChange={(e) => setNewPartyData((d) => ({ ...d, name: e.target.value }))}
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Phone</label>
-                <input
-                  type="text"
-                  className="input mt-1 w-full"
-                  value={newPartyData.phone}
-                  onChange={(e) => setNewPartyData((d) => ({ ...d, phone: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">GSTIN</label>
-                <input
-                  type="text"
-                  className="input mt-1 w-full uppercase"
-                  value={newPartyData.gstin}
-                  onChange={(e) => setNewPartyData((d) => ({ ...d, gstin: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">State</label>
-                <input
-                  type="text"
-                  className="input mt-1 w-full"
-                  value={newPartyData.state}
-                  onChange={(e) => setNewPartyData((d) => ({ ...d, state: e.target.value }))}
-                />
-              </div>
-            </div>
+              <div className="mt-4 space-y-3.5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <span>Party Name</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={`Enter ${isPurchase ? "vendor" : "customer"} business or contact name`}
+                    className="input mt-1 w-full"
+                    value={newPartyData.name}
+                    onChange={(e) => {
+                      setNewPartyData((d) => ({ ...d, name: e.target.value }));
+                      if (modalError) setModalError("");
+                    }}
+                    autoFocus
+                  />
+                </div>
 
-            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                onClick={() => setShowAddPartyModal(false)}
-                className="btn-secondary text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickCreateParty}
-                disabled={modalLoading}
-                className="btn-primary text-xs"
-              >
-                {modalLoading ? "Saving..." : "Create & Select"}
-              </button>
-            </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <span>Mobile Number</span>
+                      <span className="text-rose-500 font-bold">*</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-normal">10 digits</span>
+                  </label>
+                  <div className="relative mt-1">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-slate-400">
+                      +91
+                    </div>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="9876543210"
+                      className="input w-full pl-11 font-mono tracking-wider"
+                      value={newPartyData.phone}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setNewPartyData((d) => ({ ...d, phone: val }));
+                        if (modalError) setModalError("");
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Must be 10 digits starting with 6, 7, 8, or 9.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                    <span>GSTIN</span>
+                    <span className="text-[11px] text-slate-400 font-normal">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={15}
+                    placeholder="e.g. 27ABCDE1234F1Z5"
+                    className="input mt-1 w-full uppercase font-mono"
+                    value={newPartyData.gstin}
+                    onChange={(e) => setNewPartyData((d) => ({ ...d, gstin: e.target.value.toUpperCase() }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <span>State</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    list="quick-party-states"
+                    placeholder="e.g. Maharashtra"
+                    className="input mt-1 w-full"
+                    value={newPartyData.state}
+                    onChange={(e) => {
+                      setNewPartyData((d) => ({ ...d, state: e.target.value }));
+                      if (modalError) setModalError("");
+                    }}
+                  />
+                  <datalist id="quick-party-states">
+                    {INDIAN_STATES.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Required for GST determination (Intra-state CGST+SGST vs Inter-state IGST).
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddPartyModal(false);
+                    setModalError("");
+                  }}
+                  className="btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={modalLoading}
+                  className="btn-primary text-xs"
+                >
+                  {modalLoading ? "Saving..." : "Create & Select"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
