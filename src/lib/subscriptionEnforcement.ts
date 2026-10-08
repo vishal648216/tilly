@@ -324,8 +324,7 @@ export async function isFeatureAccessible(
 
   switch (featureKey.toUpperCase()) {
     case "OCR":
-      // Company setting must explicitly permit OCR
-      return Boolean(customFeatures.ocrEnabled);
+      return customFeatures.ocrEnabled !== false;
     case "BARCODE":
       return Boolean(settings.barcodeEnabled || customFeatures.barcodeEnabled);
     case "MULTI_WAREHOUSE":
