@@ -485,7 +485,8 @@ export async function adjustStock(
 
 /**
  * 6. STOCK LEDGER QUERY
- * Computes running balances chronologically for auditing.
+ * Computes running balances chronologically per-item for strict inventory auditing.
+ * Handles opening stock brought forward across date filters and avoids cross-item balance contamination.
  */
 export async function getStockLedger(
   companyId: string,
@@ -513,21 +514,159 @@ export async function getStockLedger(
     if (filters.endDate) where.date.lte = filters.endDate;
   }
 
+  // 1. Calculate Prior Opening Balance (Movements before startDate)
+  const itemBalances = new Map<string, number>();
+  let singleItemOpeningBalance = 0;
+
+  if (filters.startDate) {
+    const priorWhere: Prisma.StockMovementWhereInput = {
+      companyId,
+      date: { lt: filters.startDate },
+    };
+    if (filters.itemId) priorWhere.itemId = filters.itemId;
+    if (filters.warehouseId) priorWhere.warehouseId = filters.warehouseId;
+
+    const priorMovements = await prisma.stockMovement.groupBy({
+      by: ["itemId"],
+      where: priorWhere,
+      _sum: {
+        qtyIn: true,
+        qtyOut: true,
+      },
+    });
+
+    for (const pm of priorMovements) {
+      const priorQty = (pm._sum.qtyIn || 0) - (pm._sum.qtyOut || 0);
+      const roundedPrior = Math.round(priorQty * 1000) / 1000;
+      itemBalances.set(pm.itemId, roundedPrior);
+      if (filters.itemId && pm.itemId === filters.itemId) {
+        singleItemOpeningBalance = roundedPrior;
+      }
+    }
+  }
+
+  // 2. Fetch Movements within Filter Range
   const movements = await prisma.stockMovement.findMany({
     where,
     include: {
-      item: { select: { id: true, name: true, sku: true, unit: true } },
+      item: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          unit: true,
+          purchasePrice: true,
+          salePrice: true,
+          openingStockCost: true,
+        },
+      },
       warehouse: { select: { id: true, name: true, code: true } },
       variant: { select: { id: true, options: true, attributes: true } },
     },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
 
-  // Calculate Running Balance
-  let runningBalance = 0;
-  const ledgerRows = movements.map((m) => {
-    runningBalance += m.qtyIn - m.qtyOut;
-    return {
+  // 3. Chronological Tie-Breaking Sort:
+  // Inflow movements should be processed prior to Outflow movements on identical timestamps
+  const inflowTypes = new Set([
+    "OPENING",
+    "PURCHASE",
+    "TRANSFER_IN",
+    "PRODUCTION_IN",
+    "SALE_RETURN",
+  ]);
+
+  const sortedMovements = [...movements].sort((a, b) => {
+    const timeDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (timeDiff !== 0) return timeDiff;
+
+    const createdDiff =
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (createdDiff !== 0) return createdDiff;
+
+    // Tie-break: inflows before outflows
+    const aIsInflow = inflowTypes.has(a.movementType) ? 0 : 1;
+    const bIsInflow = inflowTypes.has(b.movementType) ? 0 : 1;
+    return aIsInflow - bIsInflow;
+  });
+
+  // 4. Construct Ledger Rows
+  const ledgerRows: any[] = [];
+
+  // If a single product is filtered AND startDate is provided, inject the Opening Balance row
+  if (filters.itemId && filters.startDate) {
+    const targetItem =
+      sortedMovements[0]?.item ||
+      (await prisma.item.findUnique({
+        where: { id: filters.itemId },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          unit: true,
+          purchasePrice: true,
+          salePrice: true,
+          openingStockCost: true,
+        },
+      }));
+
+    if (targetItem) {
+      const warehouse = filters.warehouseId
+        ? sortedMovements[0]?.warehouse ||
+          (await prisma.warehouse.findUnique({
+            where: { id: filters.warehouseId },
+            select: { id: true, name: true, code: true },
+          }))
+        : null;
+
+      const effectiveUnitCost =
+        Number(targetItem.purchasePrice || targetItem.openingStockCost || 0);
+
+      ledgerRows.push({
+        id: `opening-bal-${targetItem.id}`,
+        date: filters.startDate,
+        createdAt: filters.startDate,
+        referenceType: "MANUAL",
+        referenceId: "OPENING-BAL",
+        movementType: "OPENING",
+        warehouse: warehouse ? warehouse.name : "All Warehouses",
+        warehouseCode: warehouse?.code || "",
+        item: targetItem.name,
+        itemId: targetItem.id,
+        sku: targetItem.sku,
+        unit: targetItem.unit,
+        variant: null,
+        qtyIn: singleItemOpeningBalance >= 0 ? singleItemOpeningBalance : 0,
+        qtyOut: singleItemOpeningBalance < 0 ? Math.abs(singleItemOpeningBalance) : 0,
+        balance: singleItemOpeningBalance,
+        unitCost: effectiveUnitCost,
+        totalCost: Math.round(singleItemOpeningBalance * effectiveUnitCost * 100) / 100,
+        notes: `Opening Balance brought forward as of ${filters.startDate.toISOString().slice(0, 10)}`,
+        createdBy: "SYSTEM",
+      });
+    }
+  }
+
+  // 5. Map Movements to Ledger with Per-Item Running Balances
+  for (const m of sortedMovements) {
+    const prevBalance = itemBalances.get(m.itemId) || 0;
+    const currentBalance =
+      Math.round((prevBalance + m.qtyIn - m.qtyOut) * 1000) / 1000;
+    itemBalances.set(m.itemId, currentBalance);
+
+    const effectiveUnitCost =
+      m.unitCost > 0
+        ? m.unitCost
+        : Number(m.item.purchasePrice || m.item.openingStockCost || 0);
+
+    const calculatedTotalCost =
+      m.totalCost > 0
+        ? m.totalCost
+        : Math.round(
+            (m.qtyIn > 0 ? m.qtyIn : m.qtyOut) * effectiveUnitCost * 100
+          ) / 100;
+
+    ledgerRows.push({
       id: m.id,
       date: m.date,
       createdAt: m.createdAt,
@@ -543,13 +682,13 @@ export async function getStockLedger(
       variant: m.variant?.attributes || null,
       qtyIn: m.qtyIn,
       qtyOut: m.qtyOut,
-      balance: runningBalance,
-      unitCost: m.unitCost,
-      totalCost: m.totalCost,
+      balance: currentBalance,
+      unitCost: effectiveUnitCost,
+      totalCost: calculatedTotalCost,
       notes: m.notes,
       createdBy: m.createdBy,
-    };
-  });
+    });
+  }
 
   return ledgerRows;
 }

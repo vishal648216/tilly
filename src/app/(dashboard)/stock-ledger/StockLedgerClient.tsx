@@ -9,12 +9,17 @@ import {
   FileText,
   Download,
   Filter,
-  Building2,
   Package,
   ArrowRightLeft,
   SlidersHorizontal,
   Search,
   RotateCcw,
+  ArrowDownLeft,
+  ArrowUpRight,
+  TrendingUp,
+  Coins,
+  Info,
+  ExternalLink,
 } from "lucide-react";
 
 interface ItemOption {
@@ -99,7 +104,7 @@ export default function StockLedgerClient({
     router.push(pathname);
   }
 
-  // Client search filter (by reference or item name)
+  // Client search filter (by reference, item name, or notes)
   const displayedLedger = useMemo(() => {
     if (!searchTerm.trim()) return initialLedger;
     const q = searchTerm.toLowerCase();
@@ -110,6 +115,36 @@ export default function StockLedgerClient({
         (r.notes && r.notes.toLowerCase().includes(q))
     );
   }, [initialLedger, searchTerm]);
+
+  // Enterprise Stock Ledger KPI Metrics
+  const summaryKPIs = useMemo(() => {
+    let totalIn = 0;
+    let totalOut = 0;
+    const latestItemMap = new Map<string, { balance: number; unitCost: number; unit: string }>();
+
+    for (const r of displayedLedger) {
+      totalIn += r.qtyIn;
+      totalOut += r.qtyOut;
+      latestItemMap.set(r.itemId, {
+        balance: r.balance,
+        unitCost: r.unitCost,
+        unit: r.unit,
+      });
+    }
+
+    let closingValuation = 0;
+    for (const item of latestItemMap.values()) {
+      closingValuation += item.balance * item.unitCost;
+    }
+
+    return {
+      totalIn: Math.round(totalIn * 100) / 100,
+      totalOut: Math.round(totalOut * 100) / 100,
+      netMovement: Math.round((totalIn - totalOut) * 100) / 100,
+      closingValuation: Math.round(closingValuation * 100) / 100,
+      uniqueProductsCount: latestItemMap.size,
+    };
+  }, [displayedLedger]);
 
   function handleExport() {
     const headers = [
@@ -123,7 +158,7 @@ export default function StockLedgerClient({
       "Qty Out",
       "Running Balance",
       "Unit Cost",
-      "Inventory Value",
+      "Valuation",
       "User / Source",
       "Notes",
     ];
@@ -148,20 +183,43 @@ export default function StockLedgerClient({
   const movementBadgeStyle = (type: string) => {
     switch (type) {
       case "PURCHASE":
-      case "OPENING":
       case "TRANSFER_IN":
       case "SALE_RETURN":
+      case "PRODUCTION_IN":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "OPENING":
+      case "OPENING_BALANCE":
+        return "bg-sky-50 text-sky-700 border-sky-200";
       case "SALE":
       case "PURCHASE_RETURN":
       case "TRANSFER_OUT":
       case "DAMAGE":
       case "WASTAGE":
         return "bg-rose-50 text-rose-700 border-rose-200";
+      case "PRODUCTION_OUT":
+        return "bg-amber-50 text-amber-700 border-amber-200";
       default:
-        return "bg-blue-50 text-blue-700 border-blue-200";
+        return "bg-slate-100 text-slate-700 border-slate-200";
     }
   };
+
+  function getReferenceLink(refType: string | null, refId: string | null) {
+    if (!refId || refId === "—" || refId === "OPENING-BAL") return null;
+    const upper = refId.toUpperCase();
+    if (upper.startsWith("INV-") || refType === "INVOICE" || refType === "SALES_INVOICE") {
+      return "/invoices";
+    }
+    if (upper.startsWith("PUR-") || upper.startsWith("PO-") || refType === "PURCHASE" || refType === "GOODS_RECEIPT") {
+      return "/purchases";
+    }
+    if (upper.startsWith("DC-") || refType === "DELIVERY_CHALLAN") {
+      return "/delivery-challans";
+    }
+    if (upper.startsWith("MO-") || upper.startsWith("PROD-") || refType === "PRODUCTION_ORDER") {
+      return "/manufacturing";
+    }
+    return null;
+  }
 
   return (
     <div className="space-y-6">
@@ -172,7 +230,7 @@ export default function StockLedgerClient({
             <FileText className="h-6 w-6 text-brand-600" /> Stock Movement Ledger
           </h1>
           <p className="text-sm text-slate-500">
-            Immutable transaction-by-transaction inventory ledger with running balances & weighted cost history
+            Audit-grade double-entry inventory ledger with per-item running balances, prior stock continuity & valuation history
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -194,6 +252,63 @@ export default function StockLedgerClient({
           >
             <Download className="h-3.5 w-3.5 text-slate-500" /> Export CSV
           </button>
+        </div>
+      </div>
+
+      {/* 4 Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Total Inward Qty</span>
+            <div className="rounded-lg bg-emerald-100 p-2 text-emerald-600">
+              <ArrowDownLeft className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-emerald-900">
+            +{summaryKPIs.totalIn.toLocaleString("en-IN")}
+          </div>
+          <p className="text-[11px] text-emerald-700 mt-1">Purchases, opening, returns & production in</p>
+        </div>
+
+        <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-rose-800 uppercase tracking-wider">Total Outward Qty</span>
+            <div className="rounded-lg bg-rose-100 p-2 text-rose-600">
+              <ArrowUpRight className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-rose-900">
+            -{summaryKPIs.totalOut.toLocaleString("en-IN")}
+          </div>
+          <p className="text-[11px] text-rose-700 mt-1">Sales, damages, wastage & material used</p>
+        </div>
+
+        <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-blue-800 uppercase tracking-wider">Net Movement</span>
+            <div className="rounded-lg bg-blue-100 p-2 text-blue-600">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-blue-900">
+            {summaryKPIs.netMovement >= 0 ? `+${summaryKPIs.netMovement.toLocaleString("en-IN")}` : summaryKPIs.netMovement.toLocaleString("en-IN")}
+          </div>
+          <p className="text-[11px] text-blue-700 mt-1">Net quantity change in selected period</p>
+        </div>
+
+        <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-violet-800 uppercase tracking-wider">Closing Valuation</span>
+            <div className="rounded-lg bg-violet-100 p-2 text-violet-600">
+              <Coins className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-violet-900">
+            {formatCurrency(summaryKPIs.closingValuation)}
+          </div>
+          <p className="text-[11px] text-violet-700 mt-1">
+            Across {summaryKPIs.uniqueProductsCount} active product{summaryKPIs.uniqueProductsCount === 1 ? "" : "s"} shown
+          </p>
         </div>
       </div>
 
@@ -222,7 +337,7 @@ export default function StockLedgerClient({
               value={filterState.itemId}
               onChange={(e) => handleFilterChange("itemId", e.target.value)}
             >
-              <option value="">All Products</option>
+              <option value="">All Products (Per-Item Ledgers)</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.name} {i.sku ? `(${i.sku})` : ""}
@@ -259,12 +374,14 @@ export default function StockLedgerClient({
               <option value="">All Movements</option>
               <option value="PURCHASE">PURCHASE (Stock In)</option>
               <option value="SALE">SALE (Stock Out)</option>
-              <option value="SALE_RETURN">SALE_RETURN (Restock)</option>
-              <option value="PURCHASE_RETURN">PURCHASE_RETURN (Vendor Out)</option>
-              <option value="OPENING">OPENING</option>
-              <option value="STOCK_ADJUSTMENT">STOCK_ADJUSTMENT</option>
-              <option value="TRANSFER_IN">TRANSFER_IN</option>
-              <option value="TRANSFER_OUT">TRANSFER_OUT</option>
+              <option value="OPENING">OPENING (Initial Stock)</option>
+              <option value="PRODUCTION_IN">PRODUCTION_IN (Finished Goods Produced)</option>
+              <option value="PRODUCTION_OUT">PRODUCTION_OUT (Raw Material Used)</option>
+              <option value="SALE_RETURN">SALE_RETURN (Customer Restock)</option>
+              <option value="PURCHASE_RETURN">PURCHASE_RETURN (Vendor Return)</option>
+              <option value="STOCK_ADJUSTMENT">STOCK_ADJUSTMENT (Audited)</option>
+              <option value="TRANSFER_IN">TRANSFER_IN (Inter-Godown In)</option>
+              <option value="TRANSFER_OUT">TRANSFER_OUT (Inter-Godown Out)</option>
               <option value="DAMAGE">DAMAGE</option>
               <option value="WASTAGE">WASTAGE</option>
             </select>
@@ -305,6 +422,16 @@ export default function StockLedgerClient({
         </div>
       </div>
 
+      {/* Helpful Hint on Per-Product Running Balance */}
+      {!filterState.itemId && (
+        <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 flex items-start gap-2.5 text-xs text-blue-700">
+          <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold">Per-Product Running Balances Active:</span> Each row maintains the independent chronological stock balance of that specific product without mixing unrelated items. Select a single product from the filter dropdown above to view its dedicated statement with opening balance brought forward.
+          </div>
+        </div>
+      )}
+
       {/* Ledger Table */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -333,55 +460,83 @@ export default function StockLedgerClient({
                   </td>
                 </tr>
               ) : (
-                displayedLedger.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-3.5 py-2.5 whitespace-nowrap text-slate-600">
-                      {new Date(row.date).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="px-3.5 py-2.5 font-mono font-bold text-brand-600 whitespace-nowrap">
-                      {row.referenceId || "—"}
-                    </td>
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold ${movementBadgeStyle(
-                          row.movementType
-                        )}`}
-                      >
-                        {row.movementType}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 whitespace-nowrap font-medium text-slate-700">
-                      {row.warehouse}
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <span className="font-semibold text-slate-900 block">{row.item}</span>
-                      {row.sku && <span className="text-[10px] font-mono text-slate-400">SKU: {row.sku}</span>}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-semibold text-emerald-700 whitespace-nowrap">
-                      {row.qtyIn > 0 ? `+${row.qtyIn}` : "—"}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-semibold text-rose-700 whitespace-nowrap">
-                      {row.qtyOut > 0 ? `-${row.qtyOut}` : "—"}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-bold text-slate-900 whitespace-nowrap">
-                      {row.balance} {row.unit}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right text-slate-600 whitespace-nowrap">
-                      {formatCurrency(row.unitCost)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-semibold text-slate-800 whitespace-nowrap">
-                      {formatCurrency(row.balance * row.unitCost)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-slate-500 max-w-xs">
-                      <div className="truncate">{row.notes || "—"}</div>
-                      {row.createdBy && <span className="text-[10px] text-slate-400 block">by {row.createdBy}</span>}
-                    </td>
-                  </tr>
-                ))
+                displayedLedger.map((row) => {
+                  const isOpeningBalRow = row.id.startsWith("opening-bal") || row.referenceId === "OPENING-BAL";
+                  const refLink = getReferenceLink(row.referenceType, row.referenceId);
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className={
+                        isOpeningBalRow
+                          ? "bg-sky-50/50 hover:bg-sky-50 border-l-4 border-l-sky-500 transition-colors"
+                          : "hover:bg-slate-50/80 transition-colors"
+                      }
+                    >
+                      <td className="px-3.5 py-2.5 whitespace-nowrap text-slate-600">
+                        {new Date(row.date).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="px-3.5 py-2.5 font-mono font-bold whitespace-nowrap">
+                        {isOpeningBalRow ? (
+                          <span className="text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded text-[10px] tracking-wide font-sans">
+                            OPENING B/F
+                          </span>
+                        ) : refLink ? (
+                          <Link
+                            href={refLink}
+                            className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-800 hover:underline"
+                          >
+                            {row.referenceId}
+                            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                          </Link>
+                        ) : (
+                          <span className="text-brand-600">{row.referenceId || "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold ${movementBadgeStyle(
+                            row.movementType
+                          )}`}
+                        >
+                          {row.movementType}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-2.5 whitespace-nowrap font-medium text-slate-700">
+                        {row.warehouse}
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <span className="font-semibold text-slate-900 block">{row.item}</span>
+                        {row.sku && <span className="text-[10px] font-mono text-slate-400">SKU: {row.sku}</span>}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                        {row.qtyIn > 0 ? `+${row.qtyIn}` : "—"}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-semibold text-rose-700 whitespace-nowrap">
+                        {row.qtyOut > 0 ? `-${row.qtyOut}` : "—"}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-bold text-slate-900 whitespace-nowrap">
+                        <span className={row.balance < 0 ? "text-rose-600" : ""}>
+                          {row.balance} {row.unit}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right text-slate-600 whitespace-nowrap">
+                        {formatCurrency(row.unitCost)}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-semibold text-slate-800 whitespace-nowrap">
+                        {formatCurrency(row.balance * row.unitCost)}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-500 max-w-xs">
+                        <div className="truncate">{row.notes || "—"}</div>
+                        {row.createdBy && <span className="text-[10px] text-slate-400 block">by {row.createdBy}</span>}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

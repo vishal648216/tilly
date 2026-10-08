@@ -1305,20 +1305,68 @@ export async function getStockLedgerReport(
     if (to) where.date.lte = to;
   }
 
+  // 1. Calculate prior opening balances for items before 'from'
+  const itemBalances = new Map<string, number>();
+  if (from) {
+    const priorWhere: any = {
+      companyId,
+      date: { lt: from },
+    };
+    if (itemId) priorWhere.itemId = itemId;
+    if (warehouseId) priorWhere.warehouseId = warehouseId;
+
+    const priorGrouped = await prisma.stockMovement.groupBy({
+      by: ["itemId"],
+      where: priorWhere,
+      _sum: { qtyIn: true, qtyOut: true },
+    });
+
+    for (const pg of priorGrouped) {
+      itemBalances.set(
+        pg.itemId,
+        roundTo2((pg._sum.qtyIn || 0) - (pg._sum.qtyOut || 0))
+      );
+    }
+  }
+
+  // 2. Accumulate movements from preceding pages so running balances remain continuous
+  if (page > 1) {
+    const prevMovements = await prisma.stockMovement.findMany({
+      where,
+      select: { itemId: true, qtyIn: true, qtyOut: true },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      take: (page - 1) * limit,
+    });
+    for (const pm of prevMovements) {
+      const prev = itemBalances.get(pm.itemId) || 0;
+      itemBalances.set(pm.itemId, roundTo2(prev + pm.qtyIn - pm.qtyOut));
+    }
+  }
+
   const [total, movements] = await Promise.all([
     prisma.stockMovement.count({ where }),
     prisma.stockMovement.findMany({
       where,
       include: { item: true, warehouse: true },
-      orderBy: { date: "asc" },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
   ]);
 
-  let runningQty = 0;
   const data = movements.map((m) => {
-    runningQty = roundTo2(runningQty + m.qtyIn - m.qtyOut);
+    const prev = itemBalances.get(m.itemId) || 0;
+    const current = roundTo2(prev + m.qtyIn - m.qtyOut);
+    itemBalances.set(m.itemId, current);
+
+    const effectiveUnitCost =
+      m.unitCost > 0 ? m.unitCost : Number(m.item.purchasePrice || 0);
+
+    const totalCost =
+      m.totalCost > 0
+        ? m.totalCost
+        : roundTo2((m.qtyIn > 0 ? m.qtyIn : m.qtyOut) * effectiveUnitCost);
+
     return {
       id: m.id,
       date: m.date,
@@ -1331,9 +1379,9 @@ export async function getStockLedgerReport(
       referenceId: m.referenceId || "—",
       qtyIn: m.qtyIn,
       qtyOut: m.qtyOut,
-      unitCost: m.unitCost,
-      totalCost: m.totalCost,
-      runningBalance: runningQty,
+      unitCost: effectiveUnitCost,
+      totalCost,
+      runningBalance: current,
       notes: m.notes || "",
     };
   });
