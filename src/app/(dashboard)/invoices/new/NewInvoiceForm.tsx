@@ -1582,94 +1582,137 @@ export default function NewInvoiceForm({
               <h3 className="text-base font-bold text-slate-900">Add Product to Inventory</h3>
               <button
                 type="button"
-                onClick={() => setShowAddItemModal(false)}
+                onClick={() => {
+                  setShowAddItemModal(false);
+                  setItemModalError("");
+                }}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {itemModalError && (
-              <div className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-                {itemModalError}
-              </div>
-            )}
+            <form onSubmit={handleQuickCreateItem}>
+              {itemModalError && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 animate-in fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+                  <span>{itemModalError}</span>
+                </div>
+              )}
 
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Item Name *</label>
-                <input
-                  type="text"
-                  className="input mt-1 w-full"
-                  value={newItemData.name}
-                  onChange={(e) => setNewItemData((d) => ({ ...d, name: e.target.value }))}
-                  autoFocus
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="mt-4 space-y-3.5">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Sale Price (₹)</label>
-                  <input
-                    type="number"
-                    className="input mt-1 w-full"
-                    value={newItemData.salePrice}
-                    onChange={(e) => setNewItemData((d) => ({ ...d, salePrice: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Purchase Price (₹)</label>
-                  <input
-                    type="number"
-                    className="input mt-1 w-full"
-                    value={newItemData.purchasePrice}
-                    onChange={(e) => setNewItemData((d) => ({ ...d, purchasePrice: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">GST Rate %</label>
-                  <select
-                    className="input mt-1 w-full"
-                    value={newItemData.gstRate}
-                    onChange={(e) => setNewItemData((d) => ({ ...d, gstRate: e.target.value }))}
-                  >
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Unit</label>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <span>Item Name</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
                   <input
                     type="text"
+                    required
+                    placeholder="e.g. Basmati Rice 5kg or Wireless Mouse"
                     className="input mt-1 w-full"
-                    value={newItemData.unit}
-                    onChange={(e) => setNewItemData((d) => ({ ...d, unit: e.target.value }))}
+                    value={newItemData.name}
+                    onChange={(e) => {
+                      setNewItemData((d) => ({ ...d, name: e.target.value }));
+                      if (itemModalError) setItemModalError("");
+                    }}
+                    autoFocus
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                onClick={() => setShowAddItemModal(false)}
-                className="btn-secondary text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickCreateItem}
-                disabled={itemModalLoading}
-                className="btn-primary text-xs"
-              >
-                {itemModalLoading ? "Saving..." : "Add Product"}
-              </button>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">Sale Price (₹)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      className="input mt-1 w-full"
+                      value={newItemData.salePrice}
+                      onChange={(e) => setNewItemData((d) => ({ ...d, salePrice: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">Purchase Price (₹)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      className="input mt-1 w-full"
+                      value={newItemData.purchasePrice}
+                      onChange={(e) => setNewItemData((d) => ({ ...d, purchasePrice: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">GST Rate %</label>
+                    <select
+                      className="input mt-1 w-full font-medium"
+                      value={newItemData.gstRate}
+                      onChange={(e) => setNewItemData((d) => ({ ...d, gstRate: e.target.value }))}
+                    >
+                      <option value="0">0% (Nil / Exempt)</option>
+                      <option value="3">3% (Precious Items)</option>
+                      <option value="5">5%</option>
+                      <option value="12">12%</option>
+                      <option value="18">18% (Standard)</option>
+                      <option value="28">28% (Luxury / Higher)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">Unit</label>
+                    <select
+                      className="input mt-1 w-full font-medium"
+                      value={newItemData.unit}
+                      onChange={(e) => setNewItemData((d) => ({ ...d, unit: e.target.value }))}
+                    >
+                      <option value="PCS">PCS (Pieces)</option>
+                      <option value="NOS">NOS (Numbers)</option>
+                      <option value="BOX">BOX (Boxes)</option>
+                      <option value="KGS">KGS (Kilograms)</option>
+                      <option value="GMS">GMS (Grams)</option>
+                      <option value="LTR">LTR (Liters)</option>
+                      <option value="ML">ML (Milliliters)</option>
+                      <option value="MTR">MTR (Meters)</option>
+                      <option value="PAC">PAC (Packs)</option>
+                      <option value="SET">SET (Sets)</option>
+                      <option value="ROLL">ROLL (Rolls)</option>
+                      <option value="PAIR">PAIR (Pairs)</option>
+                      <option value="BAG">BAG (Bags)</option>
+                      <option value="DOZ">DOZ (Dozen)</option>
+                      <option value="QTL">QTL (Quintal)</option>
+                      <option value="TON">TON (Metric Ton)</option>
+                      <option value="HRS">HRS (Hours)</option>
+                      <option value="DAY">DAY (Days)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddItemModal(false);
+                    setItemModalError("");
+                  }}
+                  className="btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={itemModalLoading}
+                  className="btn-primary text-xs"
+                >
+                  {itemModalLoading ? "Saving..." : "Add Product"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
