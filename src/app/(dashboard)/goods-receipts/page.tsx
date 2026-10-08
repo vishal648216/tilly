@@ -66,13 +66,6 @@ export default async function GoodsReceiptsPage({
             <Plus className="h-4 w-4" />
             New Goods Receipt
           </Link>
-          <Link
-            href="/purchase-orders"
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
-          >
-            <span>Purchase Orders</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
       </div>
 
@@ -151,12 +144,7 @@ export default async function GoodsReceiptsPage({
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-600">
                         {grn.purchaseOrder ? (
-                          <Link
-                            href={`/purchase-orders/${grn.purchaseOrder.id}`}
-                            className="text-indigo-600 hover:underline"
-                          >
-                            {grn.purchaseOrder.poNo}
-                          </Link>
+                          <span>{grn.purchaseOrder.poNo}</span>
                         ) : (
                           "Direct GRN"
                         )}

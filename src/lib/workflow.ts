@@ -1775,7 +1775,7 @@ export async function getDocumentChain(
         date: po.date,
         status: po.status,
         amount: Number(po.grandTotal),
-        url: `/purchase-orders/${po.id}`,
+        url: `/purchases`,
       });
 
       for (const grn of po.grns) {
@@ -1818,7 +1818,7 @@ export async function getDocumentChain(
           date: grn.purchaseOrder.date,
           status: grn.purchaseOrder.status,
           amount: Number(grn.purchaseOrder.grandTotal),
-          url: `/purchase-orders/${grn.purchaseOrder.id}`,
+          url: `/purchases`,
         });
       }
 
@@ -1890,7 +1890,7 @@ export async function getDocumentChain(
           date: inv.purchaseOrder.date,
           status: inv.purchaseOrder.status,
           amount: Number(inv.purchaseOrder.grandTotal),
-          url: `/purchase-orders/${inv.purchaseOrder.id}`,
+          url: `/purchases`,
         });
       }
 

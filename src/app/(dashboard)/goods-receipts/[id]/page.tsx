@@ -111,12 +111,9 @@ export default async function GoodsReceiptDetailPage({
             {grn.purchaseOrder && (
               <p className="text-xs text-slate-500 mt-0.5">
                 Against Purchase Order:{" "}
-                <Link
-                  href={`/purchase-orders/${grn.purchaseOrder.id}`}
-                  className="font-semibold text-indigo-600 underline"
-                >
+                <span className="font-semibold text-slate-700">
                   #{grn.purchaseOrder.poNo}
-                </Link>
+                </span>
               </p>
             )}
           </div>

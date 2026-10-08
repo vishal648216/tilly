@@ -76,9 +76,6 @@ export default function Sidebar({
           : []),
         { href: "/sales-return", newHref: "/sales-return/new", label: "Sales Return (CN)", icon: RotateCcw },
         { href: "/purchases", newHref: "/invoices/new?type=PURCHASE", label: "Purchases (Bills)", icon: ShoppingCart },
-        ...(settings.purchaseOrderEnabled
-          ? [{ href: "/purchase-orders", newHref: "/purchase-orders/new", label: "Purchase Orders", icon: ShoppingCart, badge: "PO" }]
-          : []),
         ...(settings.goodsReceiptEnabled
           ? [{ href: "/goods-receipts", newHref: "/goods-receipts/new", label: "Goods Receipts (GRN)", icon: Package, badge: "GRN" }]
           : []),
