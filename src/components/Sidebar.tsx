@@ -88,7 +88,7 @@ export default function Sidebar({
       items: [
         { href: "/parties", newHref: "/parties/new", label: "Parties (CRM)", icon: Users },
         settings.inventoryEnabled
-          ? { href: "/items", newHref: "/items/new", label: "Items & Catalog", icon: Package }
+          ? { href: "/items", newHref: "/items/new", label: "Items & Inventory", icon: Package }
           : { href: "/items", newHref: "/items/new", label: "Services Catalog", icon: Briefcase },
         ...(settings.inventoryEnabled
           ? [
