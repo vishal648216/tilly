@@ -91,13 +91,13 @@ export default function CompanySwitcher({ activeCompanyName }: { activeCompanyNa
     <div className="relative" ref={menuRef}>
       <button
         onClick={handleToggle}
-        className="flex items-center gap-2 rounded-xl bg-slate-50/90 hover:bg-white px-2.5 sm:px-3 py-1.5 border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all text-left group"
+        className="flex items-center gap-2 rounded-xl bg-slate-50/90 hover:bg-white px-2.5 sm:px-3 py-1.5 border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all text-left group shrink-0 whitespace-nowrap"
         title="Switch active organization"
       >
         <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-100/80 text-emerald-700 shrink-0">
-          <Building2 className="h-3 w-3" />
+          <Building2 className="h-3 w-3 shrink-0" />
         </div>
-        <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] sm:max-w-[200px]">
+        <span className="text-xs font-bold text-slate-800 truncate max-w-[130px] sm:max-w-[180px] whitespace-nowrap">
           {activeCompanyName}
         </span>
         <ChevronDown className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
