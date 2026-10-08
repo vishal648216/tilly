@@ -41,14 +41,31 @@ export default async function QuotationDetailPage({
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Top Bar (Hidden on print) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
-        <Link
-          href="/quotations"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Quotations</span>
-        </Link>
+      <div className="no-print print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/quotations"
+            className="btn-secondary text-sm inline-flex items-center gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Quotations</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-900">
+              Quotation / Estimate
+            </h1>
+            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              #{quotation.quotationNo}
+            </span>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                statusColors[quotation.status] || "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {quotation.status}
+            </span>
+          </div>
+        </div>
 
         <QuotationActions
           quotationId={quotation.id}
@@ -59,7 +76,7 @@ export default async function QuotationDetailPage({
       </div>
 
       {/* Main Quotation Sheet (Printable Document) */}
-      <div className="card p-8 sm:p-12 shadow-sm bg-white border border-slate-200 print:border-none print:shadow-none print:p-0">
+      <div id="invoice-paper" className="card p-8 sm:p-12 shadow-sm bg-white border border-slate-200 print:border-none print:shadow-none print:p-0">
         {/* Document Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-200 pb-8">
           <div>

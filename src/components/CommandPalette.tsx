@@ -143,23 +143,9 @@ export default function CommandPalette() {
 
   return (
     <>
-      {/* Quick Search Button in Top Navbar */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 rounded-xl bg-slate-100/80 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-200/70 hover:text-slate-900 transition-colors border border-slate-200/60"
-        title="Search (Ctrl + K)"
-      >
-        <Search className="h-3.5 w-3.5 text-slate-400" />
-        <span className="hidden sm:inline">Search anything...</span>
-        <kbd className="hidden lg:inline-flex items-center rounded-md bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 shadow-2xs">
-          Ctrl K
-        </kbd>
-      </button>
-
-      {/* Modal Backdrop & Palette */}
+      {/* Modal Backdrop & Palette (hidden in print) */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="no-print print:hidden fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
           <div
             className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}

@@ -60,14 +60,31 @@ export default async function PurchaseOrderDetailPage({
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Top Navigation & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
-        <Link
-          href="/purchase-orders"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Purchase Orders</span>
-        </Link>
+      <div className="no-print print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/purchase-orders"
+            className="btn-secondary text-sm inline-flex items-center gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Purchase Orders</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-900">
+              Purchase Order
+            </h1>
+            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              #{purchaseOrder.poNo}
+            </span>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                statusColors[purchaseOrder.status] || "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {purchaseOrder.status.replace("_", " ")}
+            </span>
+          </div>
+        </div>
 
         <PurchaseOrderActions
           purchaseOrderId={purchaseOrder.id}
@@ -78,7 +95,7 @@ export default async function PurchaseOrderDetailPage({
       </div>
 
       {/* Main PO Document (Printable) */}
-      <div className="card p-8 bg-white shadow-sm border border-slate-200 rounded-2xl print:border-none print:shadow-none print:p-0">
+      <div id="invoice-paper" className="card p-8 bg-white shadow-sm border border-slate-200 rounded-2xl print:border-none print:shadow-none print:p-0">
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b border-slate-200">
           <div>

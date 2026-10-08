@@ -53,6 +53,18 @@ export default function InvoiceActions({
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/view/invoice/${invoiceId}`
     : "";
 
+  const docTypeName =
+    invoiceType === "SALES_RETURN"
+      ? "Credit Note"
+      : invoiceType === "PURCHASE_RETURN"
+      ? "Debit Note"
+      : invoiceType === "PURCHASE"
+      ? "Purchase Bill"
+      : invoiceType === "PROFORMA"
+      ? "Proforma Invoice"
+      : "Invoice";
+  const docFilePrefix = docTypeName.replace(/\s+/g, "");
+
   async function handleDownloadImage() {
     setGeneratingImg(true);
     try {
@@ -68,7 +80,7 @@ export default function InvoiceActions({
       const dataUrl = canvas.toDataURL("image/png");
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `Invoice-${invoiceNo}.png`;
+      a.download = `${docFilePrefix}-${invoiceNo}.png`;
       a.click();
     } catch (err: any) {
       alert("Error generating image: " + err.message);
@@ -94,13 +106,13 @@ export default function InvoiceActions({
           handleDownloadImage();
           return;
         }
-        const file = new File([blob], `Invoice-${invoiceNo}.png`, { type: "image/png" });
+        const file = new File([blob], `${docFilePrefix}-${invoiceNo}.png`, { type: "image/png" });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({
-              title: `Invoice #${invoiceNo}`,
-              text: `Invoice #${invoiceNo} from ${companyName || "Taily"} - ₹${grandTotal?.toFixed(2) || "0"}`,
+              title: `${docTypeName} #${invoiceNo}`,
+              text: `${docTypeName} #${invoiceNo} from ${companyName || "Taily"} - ₹${grandTotal?.toFixed(2) || "0"}`,
               files: [file],
             });
           } catch (shareErr) {
@@ -111,7 +123,7 @@ export default function InvoiceActions({
           const dataUrl = canvas.toDataURL("image/png");
           const a = document.createElement("a");
           a.href = dataUrl;
-          a.download = `Invoice-${invoiceNo}.png`;
+          a.download = `${docFilePrefix}-${invoiceNo}.png`;
           a.click();
           setShowShareModal(true);
         }
@@ -139,14 +151,14 @@ export default function InvoiceActions({
 
   // Build WhatsApp text with public view link & UPI payment
   const upiPayLink = upiId
-    ? `\n💳 *Pay via UPI:* upi://pay?pa=${upiId}&pn=${encodeURIComponent(companyName || "Taily")}&am=${(grandTotal || 0).toFixed(2)}&tn=Invoice-${invoiceNo}&cu=INR`
+    ? `\n💳 *Pay via UPI:* upi://pay?pa=${upiId}&pn=${encodeURIComponent(companyName || "Taily")}&am=${(grandTotal || 0).toFixed(2)}&tn=${docFilePrefix}-${invoiceNo}&cu=INR`
     : "";
 
   const viewBillLinkText = publicUrl ? `\n📄 *View/Print Bill Online:* ${publicUrl}` : "";
 
   const whatsappText = encodeURIComponent(
     `Hello ${partyName || "Customer"},\n\n` +
-      `Here is your invoice *#${invoiceNo}* from *${companyName || "Taily"}*.\n` +
+      `Here is your ${docTypeName.toLowerCase()} *#${invoiceNo}* from *${companyName || "Taily"}*.\n` +
       `💰 Amount: *${grandTotal ? formatCurrency(grandTotal) : "₹0"}*\n` +
       `📌 Status: *${status || "UNPAID"}*${viewBillLinkText}${upiPayLink}\n\n` +
       `Thank you for doing business with us!`

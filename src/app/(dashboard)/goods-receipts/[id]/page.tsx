@@ -55,14 +55,31 @@ export default async function GoodsReceiptDetailPage({
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Navigation & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
-        <Link
-          href="/goods-receipts"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Goods Receipts</span>
-        </Link>
+      <div className="no-print print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/goods-receipts"
+            className="btn-secondary text-sm inline-flex items-center gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Goods Receipts</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-900">
+              Goods Receipt Note (GRN)
+            </h1>
+            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              #{grn.grnNo}
+            </span>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                statusColors[grn.status] || "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {grn.status}
+            </span>
+          </div>
+        </div>
 
         <GoodsReceiptActions
           grnId={grn.id}
@@ -74,7 +91,7 @@ export default async function GoodsReceiptDetailPage({
       </div>
 
       {/* Main GRN Document (Printable) */}
-      <div className="card p-8 bg-white shadow-sm border border-slate-200 rounded-2xl print:border-none print:shadow-none print:p-0">
+      <div id="invoice-paper" className="card p-8 bg-white shadow-sm border border-slate-200 rounded-2xl print:border-none print:shadow-none print:p-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b border-slate-200">
           <div>

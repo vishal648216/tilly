@@ -36,13 +36,78 @@ export default async function InvoiceDetailPage({
   const displayName = customization.companyDisplayName || company.legalName || company.name;
   const displayAddress = customization.customAddress || company.address;
 
+  // Determine dynamic document labels & titles according to type
+  let documentTitle = "TAX INVOICE";
+  let headerTitle = "Tax Invoice (Sales)";
+  let badgeLabel = "Sales Invoice";
+  let badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
+  let numberLabel = "Invoice No.";
+  let backHref = "/invoices";
+  let backLabel = "Invoices";
+
+  if (invoice.type === "SALES_RETURN") {
+    documentTitle = "SALES RETURN (CN)";
+    headerTitle = "Sales Return (Credit Note)";
+    badgeLabel = "Sales Return (CN)";
+    badgeClass = "bg-amber-100 text-amber-800 border-amber-200";
+    numberLabel = "Credit Note No.";
+    backHref = "/sales-return";
+    backLabel = "Sales Returns (CN)";
+  } else if (invoice.type === "PURCHASE_RETURN") {
+    documentTitle = "PURCHASE RETURN (DN)";
+    headerTitle = "Purchase Return (Debit Note)";
+    badgeLabel = "Purchase Return (DN)";
+    badgeClass = "bg-purple-100 text-purple-800 border-purple-200";
+    numberLabel = "Debit Note No.";
+    backHref = "/purchase-return";
+    backLabel = "Purchase Returns (DN)";
+  } else if (invoice.type === "PURCHASE") {
+    documentTitle = "PURCHASE BILL";
+    headerTitle = "Purchase Bill (Inward)";
+    badgeLabel = "Purchase Bill";
+    badgeClass = "bg-blue-100 text-blue-800 border-blue-200";
+    numberLabel = "Bill No.";
+    backHref = "/purchases";
+    backLabel = "Purchases (Bills)";
+  } else if (invoice.type === "PROFORMA") {
+    documentTitle = "PROFORMA INVOICE";
+    headerTitle = "Proforma Invoice";
+    badgeLabel = "Proforma";
+    badgeClass = "bg-indigo-100 text-indigo-800 border-indigo-200";
+    numberLabel = "Proforma No.";
+    backHref = "/invoices";
+    backLabel = "Invoices";
+  } else {
+    // SALES
+    documentTitle = customization.headerText || "TAX INVOICE";
+    headerTitle = "Tax Invoice (Sales)";
+    badgeLabel = "Tax Invoice";
+    badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
+    numberLabel = "Invoice No.";
+    backHref = "/invoices";
+    backLabel = "Invoices";
+  }
+
   return (
     <div>
       {/* Top bar - hidden in print */}
-      <div className="no-print mb-4 flex items-center justify-between">
-        <a href="/invoices" className="btn-secondary text-sm">
-          ← Back to Invoices
-        </a>
+      <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <a href={backHref} className="btn-secondary text-sm">
+            ← Back to {backLabel}
+          </a>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-900">
+              {headerTitle}
+            </h1>
+            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              #{invoice.invoiceNo}
+            </span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}>
+              {badgeLabel}
+            </span>
+          </div>
+        </div>
         <InvoiceActions
           invoiceId={invoice.id}
           invoiceNo={invoice.invoiceNo}
@@ -86,10 +151,10 @@ export default async function InvoiceDetailPage({
                     {invoice.type === "SALES_RETURN" ? "Issued By (Seller)" : "Billed By (Seller)"}
                   </p>
                   <span
-                    className="text-[9px] font-bold px-2 py-0.2 rounded text-white uppercase tracking-wider"
+                    className="text-[9px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-wider"
                     style={{ backgroundColor: primaryColor }}
                   >
-                    {template} Template
+                    {documentTitle}
                   </span>
                 </div>
                 {customization.showLogo && customization.logoUrl && (
@@ -139,15 +204,8 @@ export default async function InvoiceDetailPage({
             >
               T
             </div>
-            <h2 className="text-xl font-bold uppercase" style={{ color: primaryColor }}>
-              {customization.headerText ||
-                (invoice.type === "SALES"
-                  ? "Tax Invoice (Sales)"
-                  : invoice.type === "SALES_RETURN"
-                  ? "Credit Note (Sales Return)"
-                  : invoice.type === "PURCHASE_RETURN"
-                  ? "Debit Note (Purchase Return)"
-                  : "Purchase Bill (Inward)")}
+            <h2 className="text-xl font-bold uppercase tracking-tight" style={{ color: primaryColor }}>
+              {documentTitle}
             </h2>
             <p className="text-sm text-slate-500">{displayName}</p>
           </div>
@@ -197,7 +255,7 @@ export default async function InvoiceDetailPage({
           </div>
           <div className="rounded-lg bg-slate-50 p-4 text-sm">
             <div className="flex justify-between border-b border-slate-200 py-1">
-              <span className="text-slate-500">Invoice No.</span>
+              <span className="text-slate-500">{numberLabel}</span>
               <span className="font-bold text-slate-900">{invoice.invoiceNo}</span>
             </div>
             <div className="flex justify-between border-b border-slate-200 py-1">

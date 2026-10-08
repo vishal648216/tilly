@@ -106,27 +106,47 @@ input[type="number"] {
   }
 }
 
-/* Print styles — hide sidebar, top bar, buttons when printing */
+/* Print styles — hide sidebar, top bar, super admin banners, buttons when printing */
 @media print {
-  .no-print {
-    display: none !important;
-  }
-  /* Hide sidebar */
-  body > .fixed,
+  .no-print,
+  [data-no-print],
+  .print\:hidden,
   aside,
-  header {
+  header,
+  nav,
+  [role="dialog"] {
     display: none !important;
   }
+
+  /* Reset layout and backgrounds */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* Remove padding from main content area */
   .lg\:pl-64 {
     padding-left: 0 !important;
+    margin-left: 0 !important;
   }
+
   main {
     padding: 0 !important;
+    margin: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
   }
-  /* White background, no shadows */
-  html, body {
-    background: white !important;
+
+  #invoice-paper {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 }

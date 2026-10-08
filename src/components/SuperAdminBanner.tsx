@@ -24,7 +24,7 @@ export default function SuperAdminBanner({ companyName }: { companyName: string 
   }
 
   return (
-    <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 py-2 text-xs sm:text-sm font-semibold flex items-center justify-between shadow-md z-50 sticky top-0">
+    <div className="no-print print:hidden bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 py-2 text-xs sm:text-sm font-semibold flex items-center justify-between shadow-md z-50 sticky top-0">
       <div className="flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-amber-200 animate-bounce" />
         <span>
