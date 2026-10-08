@@ -47,10 +47,10 @@ type Line = {
   sku: string;
   unit: string;
   hsn: string;
-  qty: number;
-  rate: number;
-  discount: number;
-  gstRate: number;
+  qty: number | string;
+  rate: number | string;
+  discount: number | string;
+  gstRate: number | string;
 };
 
 const emptyLine: Line = {
@@ -58,12 +58,12 @@ const emptyLine: Line = {
   itemId: "",
   name: "",
   sku: "",
-  unit: "PCS",
+  unit: "",
   hsn: "",
-  qty: 1,
-  rate: 0,
-  discount: 0,
-  gstRate: 18,
+  qty: "",
+  rate: "",
+  discount: "",
+  gstRate: "",
 };
 
 export default function NewSalesOrderForm({
@@ -81,6 +81,8 @@ export default function NewSalesOrderForm({
     partyId?: string;
     warehouseId?: string;
     quotationId?: string;
+    date?: string;
+    expectedDelivery?: string;
     notes?: string;
     terms?: string;
     lines?: Line[];
@@ -89,21 +91,12 @@ export default function NewSalesOrderForm({
   const router = useRouter();
 
   const [partyId, setPartyId] = useState(initialData?.partyId || "");
-  const [warehouseId, setWarehouseId] = useState(
-    initialData?.warehouseId || warehouses.find((w) => w.isDefault)?.id || warehouses[0]?.id || ""
-  );
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-
-  // Default expected delivery: 7 days from today
-  const defaultDelivery = new Date();
-  defaultDelivery.setDate(defaultDelivery.getDate() + 7);
-  const [expectedDelivery, setExpectedDelivery] = useState(defaultDelivery.toISOString().slice(0, 10));
+  const [warehouseId, setWarehouseId] = useState(initialData?.warehouseId || "");
+  const [date, setDate] = useState(initialData?.date || "");
+  const [expectedDelivery, setExpectedDelivery] = useState(initialData?.expectedDelivery || "");
 
   const [notes, setNotes] = useState(initialData?.notes || "");
-  const [terms, setTerms] = useState(
-    initialData?.terms ||
-      "1. Delivery as per agreed schedule.\n2. Payment terms 30 days.\n3. Goods inspected and confirmed before dispatch."
-  );
+  const [terms, setTerms] = useState(initialData?.terms || "");
 
   const [lines, setLines] = useState<Line[]>(
     initialData?.lines && initialData.lines.length > 0
@@ -224,7 +217,7 @@ export default function NewSalesOrderForm({
         partyId,
         warehouseId: warehouseId || undefined,
         quotationId: initialData?.quotationId || undefined,
-        date,
+        date: date || new Date().toISOString().slice(0, 10),
         expectedDelivery: expectedDelivery || undefined,
         notes: notes.trim() || undefined,
         terms: terms.trim() || undefined,
@@ -350,6 +343,7 @@ export default function NewSalesOrderForm({
               onChange={(e) => setWarehouseId(e.target.value)}
               className="select w-full text-xs"
             >
+              <option value="">-- Select Godown / Warehouse --</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} {w.isDefault ? "(Default)" : ""}
@@ -367,7 +361,6 @@ export default function NewSalesOrderForm({
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="input w-full text-xs pr-8"
-                required
               />
               <Calendar className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
             </div>
@@ -469,16 +462,17 @@ export default function NewSalesOrderForm({
                       type="number"
                       min="0.01"
                       step="any"
-                      value={line.qty}
-                      onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      value={line.qty !== undefined && line.qty !== null ? line.qty : ""}
+                      onChange={(e) => updateLine(line.key, "qty", e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                       className="input w-full text-xs text-right py-1 h-8 font-semibold"
-                      required
                     />
                   </td>
                   <td className="py-2.5 px-3">
                     <input
                       type="text"
-                      value={line.unit}
+                      placeholder="PCS"
+                      value={line.unit || ""}
                       onChange={(e) => updateLine(line.key, "unit", e.target.value)}
                       className="input w-full text-xs py-1 h-8 uppercase"
                     />
@@ -488,10 +482,10 @@ export default function NewSalesOrderForm({
                       type="number"
                       min="0"
                       step="any"
-                      value={line.rate}
-                      onChange={(e) => updateLine(line.key, "rate", parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      value={line.rate !== undefined && line.rate !== null ? line.rate : ""}
+                      onChange={(e) => updateLine(line.key, "rate", e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                       className="input w-full text-xs text-right py-1 h-8"
-                      required
                     />
                   </td>
                   <td className="py-2.5 px-3">
@@ -499,17 +493,19 @@ export default function NewSalesOrderForm({
                       type="number"
                       min="0"
                       step="any"
-                      value={line.discount}
-                      onChange={(e) => updateLine(line.key, "discount", parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      value={line.discount !== undefined && line.discount !== null ? line.discount : ""}
+                      onChange={(e) => updateLine(line.key, "discount", e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                       className="input w-full text-xs text-right py-1 h-8"
                     />
                   </td>
                   <td className="py-2.5 px-3">
                     <select
-                      value={line.gstRate}
-                      onChange={(e) => updateLine(line.key, "gstRate", parseFloat(e.target.value) || 0)}
+                      value={line.gstRate !== undefined && line.gstRate !== null ? line.gstRate : ""}
+                      onChange={(e) => updateLine(line.key, "gstRate", e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                       className="select w-full text-xs text-center py-1 h-8 font-semibold"
                     >
+                      <option value="">-- GST --</option>
                       <option value="0">0%</option>
                       <option value="5">5%</option>
                       <option value="12">12%</option>
@@ -565,6 +561,7 @@ export default function NewSalesOrderForm({
               rows={4}
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
+              placeholder="e.g. 1. Delivery as per agreed schedule.&#10;2. Prices are inclusive/exclusive of taxes..."
               className="textarea w-full text-xs font-mono text-[11px]"
             />
           </div>
