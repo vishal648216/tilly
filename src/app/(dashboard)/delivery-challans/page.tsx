@@ -66,13 +66,6 @@ export default async function DeliveryChallansPage({
             <Plus className="h-4 w-4" />
             New Delivery Challan
           </Link>
-          <Link
-            href="/sales-orders"
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
-          >
-            <span>Sales Orders</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
       </div>
 
@@ -152,12 +145,7 @@ export default async function DeliveryChallansPage({
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-600">
                         {dc.salesOrder ? (
-                          <Link
-                            href={`/sales-orders/${dc.salesOrder.id}`}
-                            className="text-blue-600 hover:underline"
-                          >
-                            {dc.salesOrder.orderNo}
-                          </Link>
+                          <span>{dc.salesOrder.orderNo}</span>
                         ) : (
                           "Direct DC"
                         )}

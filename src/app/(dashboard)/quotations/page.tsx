@@ -183,23 +183,6 @@ export default async function QuotationsPage({
                           >
                             To Invoice
                           </Link>
-                          {q.salesOrders.length > 0 ? (
-                            <Link
-                              href="/sales-orders"
-                              className="text-[10px] font-bold px-1.5 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200"
-                              title={`Linked SO: ${q.salesOrders[0].orderNo}`}
-                            >
-                              SO #{q.salesOrders[0].orderNo.slice(-4)}
-                            </Link>
-                          ) : (
-                            <Link
-                              href={`/quotations/${q.id}`}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
-                              title="Convert to Sales Order"
-                            >
-                              To SO
-                            </Link>
-                          )}
                         </div>
                       </td>
                     </tr>

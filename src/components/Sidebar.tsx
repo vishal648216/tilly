@@ -71,9 +71,6 @@ export default function Sidebar({
         ...(settings.quotationEnabled
           ? [{ href: "/quotations", newHref: "/quotations/new", label: "Quotations", icon: FileText, badge: "QUO" }]
           : []),
-        ...(settings.salesOrderEnabled
-          ? [{ href: "/sales-orders", newHref: "/sales-orders/new", label: "Sales Orders", icon: ShoppingCart, badge: "SO" }]
-          : []),
         ...(settings.deliveryChallanEnabled
           ? [{ href: "/delivery-challans", newHref: "/delivery-challans/new", label: "Delivery Challans", icon: ArrowRight, badge: "DC" }]
           : []),

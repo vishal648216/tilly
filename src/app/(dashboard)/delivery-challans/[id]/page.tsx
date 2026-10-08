@@ -113,12 +113,9 @@ export default async function DeliveryChallanDetailPage({
             {challan.salesOrder && (
               <p className="text-xs text-slate-500 mt-0.5">
                 Against Sales Order:{" "}
-                <Link
-                  href={`/sales-orders/${challan.salesOrder.id}`}
-                  className="font-semibold text-blue-600 underline"
-                >
+                <span className="font-semibold text-slate-700">
                   #{challan.salesOrder.orderNo}
-                </Link>
+                </span>
               </p>
             )}
           </div>

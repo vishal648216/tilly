@@ -1624,7 +1624,7 @@ export async function getDocumentChain(
           date: so.date,
           status: so.status,
           amount: Number(so.grandTotal),
-          url: `/sales-orders/${so.id}`,
+          url: `/invoices`,
         });
 
         for (const dc of so.deliveryChallans) {
@@ -1679,7 +1679,7 @@ export async function getDocumentChain(
         date: so.date,
         status: so.status,
         amount: Number(so.grandTotal),
-        url: `/sales-orders/${so.id}`,
+        url: `/invoices`,
       });
 
       for (const dc of so.deliveryChallans) {
@@ -1734,7 +1734,7 @@ export async function getDocumentChain(
           date: dc.salesOrder.date,
           status: dc.salesOrder.status,
           amount: Number(dc.salesOrder.grandTotal),
-          url: `/sales-orders/${dc.salesOrder.id}`,
+          url: `/invoices`,
         });
       }
 
@@ -1878,7 +1878,7 @@ export async function getDocumentChain(
           date: inv.salesOrder.date,
           status: inv.salesOrder.status,
           amount: Number(inv.salesOrder.grandTotal),
-          url: `/sales-orders/${inv.salesOrder.id}`,
+          url: `/invoices`,
         });
       }
 
