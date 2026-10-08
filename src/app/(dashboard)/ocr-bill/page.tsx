@@ -23,18 +23,47 @@ export default function OcrBillImportPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanRecordId, setScanRecordId] = useState<string | null>(null);
   const [billData, setBillData] = useState<any>(null);
+  const [statusText, setStatusText] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdInvoice, setCreatedInvoice] = useState<any>(null);
 
   async function handleOcrScan() {
     setIsProcessing(true);
     setErrorMessage(null);
-
-    const formData = new FormData();
-    if (file) formData.append("file", file);
-    if (rawText) formData.append("rawText", rawText);
+    setStatusText("Reading file...");
 
     try {
+      let extractedText = rawText;
+
+      // If user selected an image file, run OCR directly in the browser with live progress!
+      if (file && (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name))) {
+        setStatusText("Scanning characters with OCR (0%)...");
+        try {
+          const Tesseract = (await import("tesseract.js")).default;
+          const result = await Tesseract.recognize(file, "eng", {
+            logger: (m: any) => {
+              if (m.status === "recognizing text") {
+                const pct = Math.round((m.progress || 0) * 100);
+                setStatusText(`Scanning text with OCR (${pct}%)...`);
+              } else if (m.status) {
+                setStatusText(`${m.status.charAt(0).toUpperCase() + m.status.slice(1)}...`);
+              }
+            },
+          });
+          if (result?.data?.text) {
+            extractedText = result.data.text;
+          }
+        } catch (ocrErr: any) {
+          console.warn("Client OCR error:", ocrErr);
+        }
+      }
+
+      setStatusText("Extracting invoice details...");
+
+      const formData = new FormData();
+      if (file) formData.append("file", file);
+      if (extractedText) formData.append("rawText", extractedText);
+
       const res = await fetch("/api/ocr/scan", {
         method: "POST",
         body: formData,
@@ -52,6 +81,7 @@ export default function OcrBillImportPage() {
       setErrorMessage(err.message);
     } finally {
       setIsProcessing(false);
+      setStatusText("");
     }
   }
 
@@ -191,11 +221,19 @@ export default function OcrBillImportPage() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+            <div>
+              {isProcessing && (
+                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 inline-flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                  <span>{statusText || "Processing document..."}</span>
+                </span>
+              )}
+            </div>
             <button
               onClick={handleOcrScan}
               disabled={isProcessing}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 disabled:opacity-60"
             >
               {isProcessing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
               <span>Extract & Review Bill →</span>

@@ -4,27 +4,6 @@ import { stageOcrBillScan } from "@/lib/ocrBill";
 
 export const dynamic = "force-dynamic";
 
-function extractLargestJpegFromPdf(pdfBuffer: Buffer): Buffer | null {
-  let best: Buffer | null = null;
-  let startIndex = 0;
-  const startMarker = Buffer.from([0xff, 0xd8, 0xff]);
-  const endMarker = Buffer.from([0xff, 0xd9]);
-
-  while ((startIndex = pdfBuffer.indexOf(startMarker, startIndex)) !== -1) {
-    const endIndex = pdfBuffer.indexOf(endMarker, startIndex);
-    if (endIndex !== -1) {
-      const candidate = pdfBuffer.subarray(startIndex, endIndex + 2);
-      if (candidate.length > 2000 && (!best || candidate.length > best.length)) {
-        best = candidate;
-      }
-      startIndex = endIndex + 2;
-    } else {
-      break;
-    }
-  }
-  return best;
-}
-
 export async function POST(req: Request) {
   try {
     const context = await requireCompanyAccess(req);
@@ -39,66 +18,30 @@ export async function POST(req: Request) {
       const file = formData.get("file") as File | null;
       const textFromUpload = (formData.get("rawText") as string) || "";
 
+      // 1. If client provided extracted text (from client-side OCR or textarea), use it directly!
+      if (textFromUpload && textFromUpload.trim().length > 0) {
+        rawText = textFromUpload.trim();
+      }
+
       if (file && file.size > 0) {
         fileName = file.name;
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
         const lowerName = file.name.toLowerCase();
 
-        // 1. If it's a PDF, first attempt to extract the digital text layer
-        if (lowerName.endsWith(".pdf") || file.type.includes("pdf")) {
+        // 2. If it's a PDF and text was not yet extracted by client, parse PDF text layer
+        if (!rawText && (lowerName.endsWith(".pdf") || file.type.includes("pdf"))) {
           try {
-            const pdfParse = require("pdf-parse");
-            const pdfData = await pdfParse(buffer);
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const { PDFParse } = require("pdf-parse");
+            const parser = new PDFParse({ data: buffer });
+            const pdfData = await parser.getText();
             if (pdfData && pdfData.text && pdfData.text.trim().length > 15) {
               rawText = pdfData.text.trim();
             }
           } catch (pdfErr) {
             console.warn("Digital PDF text parse failed:", pdfErr);
           }
-
-          // If the PDF had no digital text (e.g., a photo or WhatsApp image saved as PDF)
-          if (!rawText) {
-            const extractedImage = extractLargestJpegFromPdf(buffer);
-            if (extractedImage) {
-              try {
-                const Tesseract = require("tesseract.js");
-                const ocrResult = await Tesseract.recognize(extractedImage, "eng");
-                if (ocrResult?.data?.text && ocrResult.data.text.trim().length > 5) {
-                  rawText = ocrResult.data.text.trim();
-                }
-              } catch (imgErr) {
-                console.warn("OCR on embedded PDF image error:", imgErr);
-              }
-            }
-          }
         }
-
-        // 2. If it's a direct image file (.png, .jpg, .jpeg, .webp, .bmp)
-        if (
-          !rawText &&
-          (lowerName.endsWith(".png") ||
-            lowerName.endsWith(".jpg") ||
-            lowerName.endsWith(".jpeg") ||
-            lowerName.endsWith(".webp") ||
-            lowerName.endsWith(".bmp") ||
-            file.type.includes("image"))
-        ) {
-          try {
-            const Tesseract = require("tesseract.js");
-            const ocrResult = await Tesseract.recognize(buffer, "eng");
-            if (ocrResult?.data?.text && ocrResult.data.text.trim().length > 5) {
-              rawText = ocrResult.data.text.trim();
-            }
-          } catch (ocrErr) {
-            console.warn("Tesseract OCR recognition error:", ocrErr);
-          }
-        }
-      }
-
-      // Check if text was pasted in the raw text box
-      if (!rawText && textFromUpload) {
-        rawText = textFromUpload.trim();
       }
     } else {
       const body = await req.json().catch(() => ({}));
@@ -110,7 +53,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Could not extract text from the uploaded document. If this is a photo of a bill, try uploading the direct image file (PNG/JPG) or paste the bill text in the box on the right.",
+            "Could not extract text from the document. Please ensure the document is clear, or paste the invoice text in the box.",
         },
         { status: 400 }
       );
