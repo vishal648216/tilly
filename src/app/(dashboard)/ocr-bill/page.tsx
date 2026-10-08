@@ -16,6 +16,39 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+function preprocessImageForOcr(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const scale = Math.max(1.5, Math.min(2.5, 2200 / Math.max(1, img.width)));
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.filter = "grayscale(100%) contrast(150%) brightness(105%)";
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/png"));
+            return;
+          }
+        } catch {
+          // fallback
+        }
+        resolve("");
+      };
+      img.onerror = () => resolve("");
+      img.src = URL.createObjectURL(file);
+    } catch {
+      resolve("");
+    }
+  });
+}
+
 export default function OcrBillImportPage() {
   const [step, setStep] = useState<"UPLOAD" | "REVIEW" | "CONFIRMED">("UPLOAD");
   const [file, setFile] = useState<File | null>(null);
@@ -37,10 +70,12 @@ export default function OcrBillImportPage() {
 
       // If user selected an image file, run OCR directly in the browser with live progress!
       if (file && (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name))) {
+        setStatusText("Preprocessing image for clarity...");
+        const enhancedDataUrl = await preprocessImageForOcr(file);
         setStatusText("Scanning characters with OCR (0%)...");
         try {
           const Tesseract = (await import("tesseract.js")).default;
-          const result = await Tesseract.recognize(file, "eng", {
+          const result = await Tesseract.recognize(enhancedDataUrl || file, "eng", {
             logger: (m: any) => {
               if (m.status === "recognizing text") {
                 const pct = Math.round((m.progress || 0) * 100);
