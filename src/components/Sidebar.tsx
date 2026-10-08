@@ -158,13 +158,13 @@ export default function Sidebar({
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
+          className="no-print print:hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
           onClick={() => setOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200/80 bg-white shadow-xs transition-transform duration-200 lg:translate-x-0 ${
+        className={`no-print print:hidden fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200/80 bg-white shadow-xs transition-transform duration-200 lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -295,7 +295,7 @@ export default function Sidebar({
       </aside>
 
       {/* Mobile top bar with hamburger */}
-      <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
+      <div className="no-print print:hidden sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setOpen(!open)}

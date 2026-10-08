@@ -111,6 +111,7 @@ input[type="number"] {
   .no-print,
   [data-no-print],
   .print\:hidden,
+  .lg\:hidden,
   aside,
   header,
   nav,
