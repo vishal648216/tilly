@@ -1785,7 +1785,7 @@ export async function getDocumentChain(
           docNo: grn.grnNo,
           date: grn.date,
           status: grn.status,
-          url: `/goods-receipts/${grn.id}`,
+          url: `/purchases`,
         });
       }
 
@@ -1828,7 +1828,7 @@ export async function getDocumentChain(
         docNo: grn.grnNo,
         date: grn.date,
         status: grn.status,
-        url: `/goods-receipts/${grn.id}`,
+        url: `/purchases`,
       });
 
       if (grn.invoice) {
@@ -1912,7 +1912,7 @@ export async function getDocumentChain(
           docNo: grn.grnNo,
           date: grn.date,
           status: grn.status,
-          url: `/goods-receipts/${grn.id}`,
+          url: `/purchases`,
         });
       }
 

@@ -681,24 +681,9 @@ export default function SettingsClient({
                 desc: "Create pre-sales quotations before generating final invoices.",
               },
               {
-                key: "salesOrderEnabled",
-                title: "Sales Orders Workflow",
-                desc: "Track customer sales orders before delivery challans.",
-              },
-              {
-                key: "purchaseOrderEnabled",
-                title: "Purchase Orders (PO)",
-                desc: "Issue formal POs to vendors before receiving bills.",
-              },
-              {
                 key: "deliveryChallanEnabled",
                 title: "Delivery Challans",
                 desc: "Generate dispatch challans for goods transport before final invoice.",
-              },
-              {
-                key: "goodsReceiptEnabled",
-                title: "Goods Receipts (GRN)",
-                desc: "Record physical goods arrival and verify against Purchase Orders before billing.",
               },
               {
                 key: "salespersonEnabled",
