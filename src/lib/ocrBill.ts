@@ -40,105 +40,179 @@ export function parseRawBillText(rawText: string): ExtractedBillData {
   let supplierName = "Supplier Vendor";
   let supplierGstin: string | undefined = undefined;
   let supplierPhone: string | undefined = undefined;
+  let supplierAddress: string | undefined = undefined;
   let invoiceNo = `BILL-${Date.now().toString().slice(-6)}`;
   let invoiceDate = new Date().toISOString().slice(0, 10);
   let grandTotal = 0;
   let subTotal = 0;
+  let discountTotal = 0;
   let taxTotal = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+  let igstTotal = 0;
   const items: ExtractedBillItem[] = [];
 
   const gstRegex = /\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})\b/i;
   const phoneRegex = /\b([6-9]\d{9})\b/;
-  const invRegex = /(?:invoice|bill|inv|tax\s+invoice)\s*(?:no|num|number|#)?[:.\s-]*([A-Za-z0-9\/-]+)/i;
-  const dateRegex = /(?:date|dated|dt)[:.\s-]*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i;
-  const totalRegex = /(?:grand\s+total|total\s+amount|net\s+amount|invoice\s+total)[:.\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i;
+  const invRegex = /(?:invoice\s*#|invoice\s*no\.?|inv\s*#|inv\s*no\.?|bill\s*no\.?|bill\s*#)[:.\s-]*([A-Za-z0-9\/-]+)/i;
+  const dateRegex = /(?:invoice\s+date|bill\s+date|date|dated|dt)[:.\s-]*([A-Za-z0-9,\s\/-]+)/i;
 
-  // Header parsing
-  for (let i = 0; i < Math.min(lines.length, 15); i++) {
+  let inBilledBy = false;
+  let inBilledTo = false;
+
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect Supplier Name
-    const supMatch = line.match(/(?:supplier|vendor|from|m\/s)[:.\s-]+([A-Za-z0-9\s&.,'-]+)/i);
-    if (supMatch && supMatch[1].trim().length >= 3 && !supMatch[1].toLowerCase().includes("gstin")) {
-      supplierName = supMatch[1].trim();
-    } else if (
-      supplierName === "Supplier Vendor" &&
-      !line.toLowerCase().includes("tax invoice") &&
-      !line.toLowerCase().includes("bill") &&
-      !line.match(gstRegex) &&
-      !line.match(phoneRegex) &&
-      !line.match(invRegex) &&
-      !line.match(dateRegex)
-    ) {
-      supplierName = line.replace(/^[#*-]\s*/, "").trim();
+    // Detect section headers (Billed By = Vendor, Billed To = Customer)
+    if (/^billed\s+by|^seller|^supplier|^from|^vendor/i.test(line)) {
+      inBilledBy = true;
+      inBilledTo = false;
+      const inlineName = line.replace(/^(?:billed\s+by|seller|supplier|from|vendor)[:\s-]*/i, "").trim();
+      if (inlineName.length >= 2 && !inlineName.toLowerCase().includes("gstin")) {
+        supplierName = inlineName;
+      }
+      continue;
     }
 
-    if (!supplierGstin) {
+    if (/^billed\s+to|^buyer|^customer|^to\s*:|^ship\s+to/i.test(line)) {
+      inBilledTo = true;
+      inBilledBy = false;
+      continue;
+    }
+
+    // Capture supplier name
+    if (inBilledBy && !inBilledTo) {
+      if (
+        (supplierName === "Supplier Vendor" || !supplierName) &&
+        !line.match(gstRegex) &&
+        !line.match(/^pan/i) &&
+        !line.toLowerCase().includes("invoice") &&
+        line.length >= 2
+      ) {
+        supplierName = line;
+      }
+      if (!supplierGstin) {
+        const gm = line.match(gstRegex);
+        if (gm) supplierGstin = gm[1].toUpperCase();
+      }
+    }
+
+    // Fallback supplier name
+    if (supplierName === "Supplier Vendor" && !inBilledTo) {
+      const supMatch = line.match(/(?:supplier|vendor|from|m\/s)[:.\s-]+([A-Za-z0-9\s&.,'-]+)/i);
+      if (supMatch && supMatch[1].trim().length >= 3 && !supMatch[1].toLowerCase().includes("gstin")) {
+        supplierName = supMatch[1].trim();
+      }
+    }
+
+    // Capture GSTIN
+    if (!supplierGstin && !inBilledTo) {
       const gMatch = line.match(gstRegex);
       if (gMatch) supplierGstin = gMatch[1].toUpperCase();
     }
 
-    if (!supplierPhone) {
+    // Capture Phone
+    if (!supplierPhone && !inBilledTo) {
       const pMatch = line.match(phoneRegex);
       if (pMatch) supplierPhone = pMatch[1];
     }
 
-    const invMatch = line.match(invRegex);
-    if (invMatch && invMatch[1].length >= 3) {
-      invoiceNo = invMatch[1].replace(/[:#]/g, "").trim();
+    // Invoice No
+    const im = line.match(invRegex);
+    if (im && im[1] && im[1].trim().length >= 1) {
+      invoiceNo = im[1].trim();
+    } else if (invoiceNo.startsWith("BILL-")) {
+      const fallbackInv = line.match(/^(?:invoice|bill|inv)\s*[:#\s-]+\s*([A-Za-z0-9\/-]+)$/i);
+      if (fallbackInv && fallbackInv[1]) {
+        invoiceNo = fallbackInv[1].trim();
+      }
     }
 
-    const dMatch = line.match(dateRegex);
-    if (dMatch) {
-      invoiceDate = parseFlexibleDate(dMatch[1]);
+    // Invoice Date
+    if (/invoice\s*date|bill\s*date/i.test(line) || (!invoiceDate && /date/i.test(line))) {
+      const dm = line.match(dateRegex);
+      if (dm && dm[1]) {
+        const cleanDateStr = dm[1].trim().replace(/^[:\s-]+/, "");
+        const parsed = Date.parse(cleanDateStr);
+        if (!isNaN(parsed)) {
+          invoiceDate = new Date(parsed).toISOString().slice(0, 10);
+        } else {
+          invoiceDate = parseFlexibleDate(cleanDateStr);
+        }
+      }
     }
-  }
 
-  // Parse Totals
-  for (const line of lines) {
-    const tMatch = line.match(totalRegex);
-    if (tMatch) {
-      grandTotal = parseFloat(tMatch[1].replace(/,/g, ""));
+    // Parse Totals
+    const totalMatch = line.match(/^(?:grand\s+total|total\s+amount|net\s+amount|invoice\s+total|total)\s*[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)$/i);
+    if (totalMatch && totalMatch[1] && !line.toLowerCase().includes("sub") && !line.toLowerCase().includes("taxable")) {
+      grandTotal = parseFloat(totalMatch[1].replace(/,/g, ""));
     }
-  }
 
-  // Parse Item Lines (e.g. "Widget A  10  150  18%  1500" or similar)
-  for (const line of lines) {
-    // Look for lines containing numbers at the end: qty, rate, amount
-    const tokens = line.split(/\s{2,}|\t/);
-    if (tokens.length >= 3) {
-      const lastToken = tokens[tokens.length - 1].replace(/[₹,]/g, "");
-      const secondLast = tokens[tokens.length - 2].replace(/[₹,]/g, "");
-      const thirdLast = tokens[tokens.length - 3].replace(/[₹,]/g, "");
+    if (/sub\s*total[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i.test(line)) {
+      const sm = line.match(/sub\s*total[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i);
+      if (sm) subTotal = parseFloat(sm[1].replace(/,/g, ""));
+    }
 
-      const num1 = parseFloat(lastToken);
-      const num2 = parseFloat(secondLast);
-      const num3 = parseFloat(thirdLast);
+    if (/cgst[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i.test(line)) {
+      const cm = line.match(/cgst[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i);
+      if (cm) cgstTotal = parseFloat(cm[1].replace(/,/g, ""));
+    }
 
-      if (!isNaN(num1) && !isNaN(num2) && !isNaN(num3)) {
-        items.push({
-          name: tokens[0].trim(),
-          qty: num3,
-          rate: num2,
-          gstRate: 18,
-          amount: num1,
-        });
+    if (/sgst[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i.test(line)) {
+      const sm = line.match(/sgst[:\s-]*₹?\s*([\d,]+(?:\.\d{1,2})?)/i);
+      if (sm) sgstTotal = parseFloat(sm[1].replace(/,/g, ""));
+    }
+
+    // Parse Line Items:
+    // Format 1: "1. Basic Web Development 02 10 9% 10,000.00 900 900 11,800.00"
+    const itemMatch = line.match(
+      /^(?:(\d+)[\.\s]+)?([A-Za-z0-9\s\-_+()\/]{3,}?)\s+(?:\d+\s+)?(\d+(?:\.\d+)?)\s+(?:\d+%\s+)?₹?\s*([\d,]+(?:\.\d{1,2})?)(?:\s+₹?[\d,]+(?:\.\d{1,2})?)*\s+₹?\s*([\d,]+(?:\.\d{1,2})?)$/
+    );
+    if (
+      itemMatch &&
+      !line.toLowerCase().includes("sub total") &&
+      !line.toLowerCase().includes("taxable amount") &&
+      !line.toLowerCase().includes("total")
+    ) {
+      const name = itemMatch[2].trim();
+      const qty = parseFloat(itemMatch[3]) || 1;
+      const rate = parseFloat(itemMatch[4].replace(/,/g, "")) || 0;
+      const amount = parseFloat(itemMatch[5].replace(/,/g, "")) || qty * rate;
+      items.push({ name, qty, rate, gstRate: 18, amount });
+    } else {
+      // Format 2: Tab-delimited or double-spaced items
+      const tokens = line.split(/\s{2,}|\t/);
+      if (tokens.length >= 3 && !line.toLowerCase().includes("total") && !line.toLowerCase().includes("gstin")) {
+        const lastToken = tokens[tokens.length - 1].replace(/[₹,]/g, "");
+        const secondLast = tokens[tokens.length - 2].replace(/[₹,]/g, "");
+        const thirdLast = tokens[tokens.length - 3].replace(/[₹,]/g, "");
+
+        const num1 = parseFloat(lastToken);
+        const num2 = parseFloat(secondLast);
+        const num3 = parseFloat(thirdLast);
+
+        if (!isNaN(num1) && !isNaN(num2) && !isNaN(num3)) {
+          items.push({
+            name: tokens[0].trim(),
+            qty: num3,
+            rate: num2,
+            gstRate: 18,
+            amount: num1,
+          });
+        }
       }
     }
   }
 
-  // Fallback demo items if text was freeform or image simulated
-  if (items.length === 0) {
-    items.push(
-      { name: "Raw Material Component Alpha", qty: 20, rate: 250, gstRate: 18, amount: 5000 },
-      { name: "Industrial Fasteners Box", qty: 10, rate: 120, gstRate: 18, amount: 1200 }
-    );
-  }
-
-  subTotal = items.reduce((acc, it) => acc + (it.qty * it.rate - (it.discount || 0)), 0);
-  taxTotal = items.reduce((acc, it) => acc + (it.qty * it.rate * it.gstRate) / 100, 0);
-  if (!grandTotal || grandTotal === 0) {
-    grandTotal = Math.round((subTotal + taxTotal) * 100) / 100;
+  // Recalculate totals if not explicitly parsed from OCR
+  if (items.length > 0) {
+    if (!subTotal || subTotal === 0) {
+      subTotal = items.reduce((acc, it) => acc + (it.qty * it.rate - (it.discount || 0)), 0);
+    }
+    taxTotal = (cgstTotal + sgstTotal) > 0 ? (cgstTotal + sgstTotal) : items.reduce((acc, it) => acc + (it.qty * it.rate * it.gstRate) / 100, 0);
+    if (!grandTotal || grandTotal === 0) {
+      grandTotal = Math.round((subTotal + taxTotal) * 100) / 100;
+    }
   }
 
   return {
@@ -149,11 +223,11 @@ export function parseRawBillText(rawText: string): ExtractedBillData {
     invoiceDate,
     subTotal,
     taxTotal,
-    cgstTotal: taxTotal / 2,
-    sgstTotal: taxTotal / 2,
+    cgstTotal: cgstTotal || taxTotal / 2,
+    sgstTotal: sgstTotal || taxTotal / 2,
     grandTotal,
     items,
-    confidence: 0.92,
+    confidence: items.length > 0 ? 0.95 : 0.8,
   };
 }
 
@@ -168,7 +242,11 @@ function parseFlexibleDate(str: string): string {
         return `${year}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
     }
-    return new Date(str).toISOString().slice(0, 10);
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed)) {
+      return new Date(parsed).toISOString().slice(0, 10);
+    }
+    return new Date().toISOString().slice(0, 10);
   } catch {
     return new Date().toISOString().slice(0, 10);
   }
