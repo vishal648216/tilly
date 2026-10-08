@@ -8,6 +8,8 @@ import {
   isValidGstin,
   isValidPincode,
   isValidPan,
+  isValidIndianMobile,
+  INDIAN_STATES,
 } from "@/lib/validators";
 import {
   UserPlus,
@@ -93,8 +95,8 @@ export default function NewPartyForm() {
   }
 
   const isPhoneValid = useMemo(() => {
-    if (!form.phone.trim()) return true;
-    return isValidPhone(form.phone);
+    if (!form.phone.trim()) return false;
+    return isValidIndianMobile(form.phone);
   }, [form.phone]);
 
   const isEmailValid = useMemo(() => {
@@ -124,6 +126,7 @@ export default function NewPartyForm() {
     setTouched({
       name: true,
       phone: true,
+      state: true,
       email: true,
       gstin: true,
       pan: true,
@@ -135,8 +138,18 @@ export default function NewPartyForm() {
       setActiveTab("basic");
       return;
     }
-    if (form.phone.trim() && !isPhoneValid) {
-      setError("Please enter a valid 10-digit mobile number.");
+    if (!form.phone.trim()) {
+      setError("Mobile number is required.");
+      setActiveTab("basic");
+      return;
+    }
+    if (!isPhoneValid) {
+      setError("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.");
+      setActiveTab("basic");
+      return;
+    }
+    if (!form.state.trim()) {
+      setError("State is required. Please select or enter a valid state.");
       setActiveTab("basic");
       return;
     }
@@ -315,15 +328,40 @@ export default function NewPartyForm() {
               </div>
 
               <div>
-                <label className="label">Mobile Number</label>
-                <input
-                  type="tel"
-                  placeholder="10-digit mobile number"
-                  className="input"
-                  value={form.phone}
-                  onChange={(e) => update("phone", e.target.value)}
-                  onBlur={() => handleBlur("phone")}
-                />
+                <label className="label flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <span>Mobile Number</span>
+                    <span className="text-red-500 font-bold">*</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-normal">10 digits</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-slate-400">
+                    +91
+                  </div>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="9876543210"
+                    className={`input pl-11 font-mono tracking-wider ${
+                      touched.phone && (!form.phone.trim() || !isPhoneValid)
+                        ? "border-red-500 focus:border-red-500"
+                        : ""
+                    }`}
+                    value={form.phone}
+                    onChange={(e) => update("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    onBlur={() => handleBlur("phone")}
+                  />
+                </div>
+                {touched.phone && !form.phone.trim() && (
+                  <p className="text-xs text-red-600 mt-1">Mobile number is required.</p>
+                )}
+                {touched.phone && form.phone.trim() && !isPhoneValid && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -402,14 +440,30 @@ export default function NewPartyForm() {
               </div>
 
               <div>
-                <label className="label">State</label>
+                <label className="label flex items-center gap-1">
+                  <span>State</span>
+                  <span className="text-red-500 font-bold">*</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. Maharashtra, Gujarat"
-                  className="input"
+                  required
+                  list="party-states-list"
+                  placeholder="e.g. Maharashtra"
+                  className={`input ${
+                    touched.state && !form.state.trim() ? "border-red-500 focus:border-red-500" : ""
+                  }`}
                   value={form.state}
                   onChange={(e) => update("state", e.target.value)}
+                  onBlur={() => handleBlur("state")}
                 />
+                <datalist id="party-states-list">
+                  {INDIAN_STATES.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+                {touched.state && !form.state.trim() && (
+                  <p className="text-xs text-red-600 mt-1">State is required.</p>
+                )}
               </div>
 
               <div>

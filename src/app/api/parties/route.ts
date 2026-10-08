@@ -75,8 +75,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Party name must be at least 2 characters long." }, { status: 400 });
     }
 
-    if (phone && !isValidPhone(phone)) {
-      return NextResponse.json({ error: "Please enter a valid 10-digit mobile number." }, { status: 400 });
+    const cleanPhone = phone?.trim();
+    if (!cleanPhone && (type === "VENDOR" || type === "SUPPLIER")) {
+      return NextResponse.json({ error: "Mobile number is required for vendor registration." }, { status: 400 });
+    }
+    if (cleanPhone && !isValidPhone(cleanPhone)) {
+      return NextResponse.json({ error: "Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9." }, { status: 400 });
+    }
+
+    const cleanState = state?.trim();
+    if (!cleanState && (type === "VENDOR" || type === "SUPPLIER")) {
+      return NextResponse.json({ error: "State is required for vendor registration." }, { status: 400 });
     }
 
     if (email && !isValidEmail(email)) {
