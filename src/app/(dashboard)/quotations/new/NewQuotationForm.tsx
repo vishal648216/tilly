@@ -333,17 +333,17 @@ export default function NewQuotationForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[1150px]">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="py-2.5 px-3 font-semibold min-w-[200px]">Item / Product</th>
-                <th className="py-2.5 px-2 font-semibold w-20">HSN</th>
-                <th className="py-2.5 px-2 font-semibold w-20 text-right">Qty</th>
-                <th className="py-2.5 px-2 font-semibold w-24">Unit</th>
-                <th className="py-2.5 px-2 font-semibold w-28 text-right">Rate (₹)</th>
-                <th className="py-2.5 px-2 font-semibold w-20 text-right">Disc %</th>
-                <th className="py-2.5 px-2 font-semibold w-20 text-right">GST %</th>
-                <th className="py-2.5 px-3 font-semibold w-28 text-right">Amount (₹)</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[240px]">Item / Product</th>
+                <th className="py-2.5 px-2 font-semibold w-24 min-w-[85px]">HSN</th>
+                <th className="py-2.5 px-2 font-semibold w-28 min-w-[105px] text-right">Qty</th>
+                <th className="py-2.5 px-2 font-semibold w-20 min-w-[75px]">Unit</th>
+                <th className="py-2.5 px-2 font-semibold w-32 min-w-[115px] text-right">Rate (₹)</th>
+                <th className="py-2.5 px-2 font-semibold w-24 min-w-[90px] text-right">Disc %</th>
+                <th className="py-2.5 px-2 font-semibold w-28 min-w-[100px] text-center">GST %</th>
+                <th className="py-2.5 px-3 font-semibold w-32 min-w-[125px] text-right">Amount (₹)</th>
                 <th className="py-2.5 px-2 w-10 text-center"></th>
               </tr>
             </thead>

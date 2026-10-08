@@ -357,16 +357,16 @@ export default function NewGoodsReceiptForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="table w-full text-left text-xs">
+          <table className="table w-full text-left text-xs min-w-[850px]">
             <thead className="bg-slate-100/70 text-slate-600 border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-center">#</th>
-                <th className="py-2.5 px-3 min-w-[220px]">Item Description</th>
-                {purchaseOrderId && <th className="py-2.5 px-3 w-24 text-right">Ordered</th>}
-                {purchaseOrderId && <th className="py-2.5 px-3 w-24 text-right">Remaining</th>}
-                <th className="py-2.5 px-3 w-32 text-right">Received Qty *</th>
-                <th className="py-2.5 px-3 w-20">Unit</th>
-                <th className="py-2.5 px-3 w-28 text-right">Unit Rate (₹)</th>
+                <th className="py-2.5 px-3 min-w-[240px]">Item Description</th>
+                {purchaseOrderId && <th className="py-2.5 px-3 w-24 min-w-[90px] text-right">Ordered</th>}
+                {purchaseOrderId && <th className="py-2.5 px-3 w-24 min-w-[90px] text-right">Remaining</th>}
+                <th className="py-2.5 px-3 w-32 min-w-[115px] text-right">Received Qty *</th>
+                <th className="py-2.5 px-3 w-20 min-w-[75px]">Unit</th>
+                <th className="py-2.5 px-3 w-32 min-w-[115px] text-right">Unit Rate (₹)</th>
                 {!purchaseOrderId && <th className="py-2.5 px-2 w-10 text-center"></th>}
               </tr>
             </thead>

@@ -920,12 +920,12 @@ export default function NewInvoiceForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1220px]">
+          <table className="w-full text-sm min-w-[1260px]">
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-3 py-2.5 font-medium min-w-[220px]">Product / Item</th>
                 <th className="px-3 py-2.5 font-medium w-24 min-w-[90px]">SKU</th>
-                <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[95px]">Qty</th>
+                <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[105px]">Qty</th>
                 <th className="px-3 py-2.5 font-medium w-24 min-w-[95px]">Unit</th>
                 <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[115px]">
                   {isPurchase ? "Purchase Price (₹)" : "Rate (₹)"}
@@ -935,7 +935,7 @@ export default function NewInvoiceForm({
                     Selling Price (₹)
                   </th>
                 )}
-                <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[85px]">Disc (%)</th>
+                <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[95px]">Disc (%)</th>
                 <th className="px-3 py-2.5 text-right font-medium w-24 min-w-[95px]">GST %</th>
                 <th className="px-3 py-2.5 text-right font-medium w-28 min-w-[105px]">Taxable (₹)</th>
                 <th className="px-3 py-2.5 text-right font-medium w-36 min-w-[140px]">

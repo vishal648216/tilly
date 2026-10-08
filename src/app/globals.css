@@ -39,6 +39,16 @@ body {
   background: #94a3b8;
 }
 
+/* Hide native number input spinners for financial inputs */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Reusable component classes */
 @layer components {
   .btn {

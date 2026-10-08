@@ -367,15 +367,15 @@ export default function NewPurchaseReturnForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[950px]">
             <thead className="bg-slate-100/70 text-xs font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-3 min-w-[200px]">Item Description</th>
-                <th className="px-3 py-3 w-24">HSN</th>
-                <th className="px-3 py-3 w-28 text-right">Return Qty</th>
-                <th className="px-3 py-3 w-28 text-right">Purchase Rate (₹)</th>
-                <th className="px-3 py-3 w-24 text-right">GST %</th>
-                <th className="px-4 py-3 w-32 text-right">Amount (₹)</th>
+                <th className="px-4 py-3 min-w-[240px]">Item Description</th>
+                <th className="px-3 py-3 w-24 min-w-[85px]">HSN</th>
+                <th className="px-3 py-3 w-28 min-w-[105px] text-right">Return Qty</th>
+                <th className="px-3 py-3 w-32 min-w-[115px] text-right">Purchase Rate (₹)</th>
+                <th className="px-3 py-3 w-24 min-w-[90px] text-right">GST %</th>
+                <th className="px-4 py-3 w-32 min-w-[125px] text-right">Amount (₹)</th>
                 <th className="px-3 py-3 w-12 text-center"></th>
               </tr>
             </thead>
