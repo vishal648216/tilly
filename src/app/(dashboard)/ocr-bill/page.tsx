@@ -13,6 +13,7 @@ import {
   FileText,
   DollarSign,
   ShoppingCart,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -120,35 +121,123 @@ export default function OcrBillImportPage() {
     }
   }
 
+  const [showAddColMenu, setShowAddColMenu] = useState(false);
+  const [customColName, setCustomColName] = useState("");
+  const [customColType, setCustomColType] = useState<"text" | "number">("text");
+
+  // Dynamic columns resolution
+  const activeColumns: Array<{ id: string; label: string; type: "text" | "number" | "select"; width?: string; required?: boolean }> =
+    billData?.columns && billData.columns.length > 0
+      ? billData.columns
+      : [
+          { id: "name", label: "Item Description", type: "text", required: true },
+          { id: "qty", label: "Qty", type: "number", width: "w-20" },
+          { id: "rate", label: "Rate (₹)", type: "number", width: "w-24" },
+          { id: "gstRate", label: "GST %", type: "select", width: "w-20" },
+          { id: "amount", label: "Amount (₹)", type: "number", width: "w-28", required: true },
+        ];
+
+  function handleAddColumn(col: { id: string; label: string; type: "text" | "number" | "select"; width?: string }) {
+    if (!billData) return;
+    const exists = activeColumns.some((c) => c.id === col.id);
+    if (exists) {
+      setShowAddColMenu(false);
+      return;
+    }
+    const updatedCols = [...activeColumns, col];
+    const updatedItems = billData.items.map((item: any) => ({
+      ...item,
+      [col.id]: item[col.id] ?? (col.type === "number" ? 0 : ""),
+    }));
+    setBillData({
+      ...billData,
+      columns: updatedCols,
+      items: updatedItems,
+    });
+    setShowAddColMenu(false);
+    setCustomColName("");
+  }
+
+  function handleRemoveColumn(colId: string) {
+    if (!billData || colId === "name" || colId === "amount") return;
+    const updatedCols = activeColumns.filter((c) => c.id !== colId);
+    setBillData({
+      ...billData,
+      columns: updatedCols,
+    });
+  }
+
   function handleLineChange(index: number, field: string, value: any) {
     const lines = [...billData.items];
     lines[index] = { ...lines[index], [field]: value };
 
-    // Recalculate line amount
+    // Intelligent recalculation
     const qty = Number(lines[index].qty || 0);
     const rate = Number(lines[index].rate || 0);
     const discount = Number(lines[index].discount || 0);
-    lines[index].amount = Math.max(0, qty * rate - discount);
+    const gstRate = Number(lines[index].gstRate !== undefined ? lines[index].gstRate : 18);
 
-    const newSubTotal = lines.reduce((acc: number, it: any) => acc + (it.amount || 0), 0);
-    const newTax = lines.reduce(
-      (acc: number, it: any) => acc + ((it.amount || 0) * (it.gstRate || 0)) / 100,
-      0
-    );
-    const newGrandTotal = Math.round((newSubTotal + newTax) * 100) / 100;
+    if (field === "taxableAmount") {
+      const taxable = Number(value || 0);
+      if (lines[index].cgstAmount !== undefined || lines[index].sgstAmount !== undefined) {
+        lines[index].cgstAmount = Math.round((taxable * (gstRate / 2) / 100) * 100) / 100;
+        lines[index].sgstAmount = Math.round((taxable * (gstRate / 2) / 100) * 100) / 100;
+      }
+      lines[index].amount = Math.round((taxable + (lines[index].cgstAmount || 0) + (lines[index].sgstAmount || 0) + (lines[index].igstAmount || 0)) * 100) / 100;
+    } else if (field === "qty" || field === "rate" || field === "discount") {
+      const taxable = Math.max(0, qty * rate - discount);
+      if (lines[index].taxableAmount !== undefined) {
+        lines[index].taxableAmount = taxable;
+      }
+      if (lines[index].cgstAmount !== undefined || lines[index].sgstAmount !== undefined) {
+        lines[index].cgstAmount = Math.round((taxable * (gstRate / 2) / 100) * 100) / 100;
+        lines[index].sgstAmount = Math.round((taxable * (gstRate / 2) / 100) * 100) / 100;
+      }
+      const itemTax = (lines[index].cgstAmount || 0) + (lines[index].sgstAmount || 0) + (lines[index].igstAmount || 0);
+      lines[index].amount = Math.round((taxable + (itemTax > 0 ? itemTax : (taxable * gstRate) / 100)) * 100) / 100;
+    } else if (field === "gstRate") {
+      const taxable = Number(lines[index].taxableAmount || Math.max(0, qty * rate - discount));
+      if (lines[index].cgstAmount !== undefined || lines[index].sgstAmount !== undefined) {
+        lines[index].cgstAmount = Math.round((taxable * (Number(value) / 2) / 100) * 100) / 100;
+        lines[index].sgstAmount = Math.round((taxable * (Number(value) / 2) / 100) * 100) / 100;
+      }
+      const itemTax = (lines[index].cgstAmount || 0) + (lines[index].sgstAmount || 0) + (lines[index].igstAmount || 0);
+      lines[index].amount = Math.round((taxable + (itemTax > 0 ? itemTax : (taxable * Number(value)) / 100)) * 100) / 100;
+    } else if (field === "cgstAmount" || field === "sgstAmount" || field === "igstAmount") {
+      const taxable = Number(lines[index].taxableAmount || Math.max(0, qty * rate - discount));
+      lines[index].amount = Math.round((taxable + Number(lines[index].cgstAmount || 0) + Number(lines[index].sgstAmount || 0) + Number(lines[index].igstAmount || 0)) * 100) / 100;
+    }
+
+    // Totals roll-up
+    const newSubTotal = lines.reduce((acc: number, it: any) => acc + (it.taxableAmount !== undefined ? Number(it.taxableAmount || 0) : (Number(it.qty || 0) * Number(it.rate || 0))), 0);
+    const newCgst = lines.reduce((acc: number, it: any) => acc + Number(it.cgstAmount || 0), 0);
+    const newSgst = lines.reduce((acc: number, it: any) => acc + Number(it.sgstAmount || 0), 0);
+    const newIgst = lines.reduce((acc: number, it: any) => acc + Number(it.igstAmount || 0), 0);
+    const totalTaxCalculated = (newCgst + newSgst + newIgst) > 0
+      ? (newCgst + newSgst + newIgst)
+      : lines.reduce((acc: number, it: any) => acc + ((Number(it.amount || 0) * Number(it.gstRate || 0)) / 100), 0);
+    const newGrandTotal = Math.round(lines.reduce((acc: number, it: any) => acc + Number(it.amount || 0), 0) * 100) / 100;
 
     setBillData({
       ...billData,
       items: lines,
       subTotal: newSubTotal,
-      taxTotal: newTax,
+      cgstTotal: newCgst,
+      sgstTotal: newSgst,
+      igstTotal: newIgst,
+      taxTotal: totalTaxCalculated,
       grandTotal: newGrandTotal,
     });
   }
 
   function addEmptyLine() {
-    const lines = [...billData.items, { name: "", qty: 1, rate: 0, gstRate: 18, amount: 0 }];
-    setBillData({ ...billData, items: lines });
+    const newItem: any = { name: "", qty: 1, rate: 0, gstRate: 18, amount: 0 };
+    for (const col of activeColumns) {
+      if (newItem[col.id] === undefined) {
+        newItem[col.id] = col.type === "number" ? 0 : "";
+      }
+    }
+    setBillData({ ...billData, items: [...billData.items, newItem] });
   }
 
   function removeLine(idx: number) {
@@ -183,7 +272,7 @@ export default function OcrBillImportPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -224,7 +313,7 @@ export default function OcrBillImportPage() {
             </div>
             <h2 className="text-lg font-bold text-slate-900">Upload Supplier Invoice or Receipt</h2>
             <p className="text-xs text-slate-500">
-              Upload PDF or image bill, or paste raw text below to trigger intelligent OCR parsing.
+              Upload PDF or image bill, or paste raw text below to trigger intelligent OCR parsing with dynamic columns.
             </p>
           </div>
 
@@ -249,7 +338,7 @@ export default function OcrBillImportPage() {
               <textarea
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="TAX INVOICE&#10;Supplier: Acme Industrial Tools Pvt Ltd&#10;GSTIN: 27AABCA1234F1Z8&#10;Invoice No: INV-2026-9921&#10;Date: 01-10-2026&#10;&#10;Precision CNC Drill Bit	20	250	5000&#10;Carbide End Mill 10mm	10	450	4500&#10;&#10;Grand Total: 11210.00"
+                placeholder="Invoice#: 004&#10;Billed by: Foobar Labs&#10;GSTIN: 29ABCED1234F2Z5&#10;Billed to: Wox Studio&#10;1. Basic Web Development 02 10 9% 10,000.00 900 900 11,800.00&#10;Grand Total: 42,480"
                 rows={7}
                 className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
               />
@@ -277,17 +366,17 @@ export default function OcrBillImportPage() {
         </div>
       )}
 
-      {/* STEP 2: REVIEW SCREEN (Never post unverified OCR directly) */}
+      {/* STEP 2: REVIEW SCREEN WITH DYNAMIC COLUMNS & ROWS */}
       {step === "REVIEW" && billData && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 inline-block mb-1">
-                Staged for Review (Unverified)
+                Staged for Review (Dynamic Columns Generated)
               </span>
               <h2 className="text-lg font-bold text-slate-900">Review & Correct Extracted Invoice Details</h2>
               <p className="text-xs text-slate-500">
-                Verify supplier, dates, items and tax rates. Edits made here will update the bill before posting.
+                Columns and fields have been dynamically adapted to match your bill. Add or customize columns and verify values before posting.
               </p>
             </div>
             <button
@@ -298,10 +387,10 @@ export default function OcrBillImportPage() {
             </button>
           </div>
 
-          {/* Supplier & Invoice Header */}
+          {/* Supplier, Customer & Invoice Header Fields */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
-              <label className="text-[11px] font-semibold text-slate-500">Supplier Name</label>
+              <label className="text-[11px] font-semibold text-slate-500">Supplier Name (Billed By)</label>
               <input
                 type="text"
                 value={billData.supplierName || ""}
@@ -328,7 +417,7 @@ export default function OcrBillImportPage() {
               />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-slate-500">Bill Date</label>
+              <label className="text-[11px] font-semibold text-slate-500">Invoice Date</label>
               <input
                 type="date"
                 value={billData.invoiceDate || ""}
@@ -336,80 +425,250 @@ export default function OcrBillImportPage() {
                 className="w-full text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 mt-1"
               />
             </div>
+
+            {/* Additional Detected Fields */}
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500">Due Date</label>
+              <input
+                type="date"
+                value={billData.dueDate || ""}
+                onChange={(e) => setBillData({ ...billData, dueDate: e.target.value })}
+                className="w-full text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500">Place of Supply</label>
+              <input
+                type="text"
+                placeholder="e.g. Karnataka"
+                value={billData.placeOfSupply || ""}
+                onChange={(e) => setBillData({ ...billData, placeOfSupply: e.target.value })}
+                className="w-full text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500">Billed To (Customer)</label>
+              <input
+                type="text"
+                placeholder="e.g. Wox Studio"
+                value={billData.customerName || ""}
+                onChange={(e) => setBillData({ ...billData, customerName: e.target.value })}
+                className="w-full text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500">Supplier Address</label>
+              <input
+                type="text"
+                placeholder="Address"
+                value={billData.supplierAddress || ""}
+                onChange={(e) => setBillData({ ...billData, supplierAddress: e.target.value })}
+                className="w-full text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 mt-1"
+              />
+            </div>
           </div>
 
-          {/* Line Items Table */}
+          {/* Line Items Table with Dynamic Columns */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-800">Extracted Line Items</h3>
-              <button
-                onClick={addEmptyLine}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 hover:bg-emerald-100"
-              >
-                <Plus className="w-3 h-3" />
-                <span>Add Item</span>
-              </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-800">
+                  Extracted Line Items ({billData.items.length} items, {activeColumns.length} columns)
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Add Column Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAddColMenu(!showAddColMenu)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-200"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Add Column</span>
+                  </button>
+
+                  {showAddColMenu && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-3 z-30 space-y-2">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Quick Presets</p>
+                      <div className="grid grid-cols-2 gap-1 text-xs">
+                        <button
+                          onClick={() => handleAddColumn({ id: "hsn", label: "HSN / SAC", type: "text", width: "w-20" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + HSN / SAC
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "taxableAmount", label: "Taxable Amt", type: "number", width: "w-28" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + Taxable Amt
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "rate", label: "Rate (₹)", type: "number", width: "w-24" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + Rate (₹)
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "discount", label: "Discount", type: "number", width: "w-20" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + Discount
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "cgstAmount", label: "CGST (₹)", type: "number", width: "w-24" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + CGST (₹)
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "sgstAmount", label: "SGST (₹)", type: "number", width: "w-24" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + SGST (₹)
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "unit", label: "Unit", type: "text", width: "w-16" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + Unit
+                        </button>
+                        <button
+                          onClick={() => handleAddColumn({ id: "batchNo", label: "Batch No", type: "text", width: "w-24" })}
+                          className="text-left px-2 py-1.5 hover:bg-slate-100 rounded text-slate-700"
+                        >
+                          + Batch No
+                        </button>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Custom Column</p>
+                        <input
+                          type="text"
+                          placeholder="Column Name (e.g. Brand)"
+                          value={customColName}
+                          onChange={(e) => setCustomColName(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded px-2 py-1"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={customColType}
+                            onChange={(e) => setCustomColType(e.target.value as any)}
+                            className="text-xs border border-slate-200 rounded px-2 py-1 flex-1"
+                          >
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                          </select>
+                          <button
+                            onClick={() => {
+                              if (!customColName.trim()) return;
+                              const safeId = customColName.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                              handleAddColumn({ id: safeId, label: customColName.trim(), type: customColType });
+                            }}
+                            className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-semibold hover:bg-emerald-700"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={addEmptyLine}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Item (Row)</span>
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-2xs">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 select-none">
                   <tr>
-                    <th className="py-2.5 px-3">Item Name</th>
-                    <th className="py-2.5 px-3 w-20">Qty</th>
-                    <th className="py-2.5 px-3 w-24">Rate (₹)</th>
-                    <th className="py-2.5 px-3 w-20">GST %</th>
-                    <th className="py-2.5 px-3 w-28">Amount (₹)</th>
-                    <th className="py-2.5 px-3 w-10"></th>
+                    {activeColumns.map((col) => (
+                      <th key={col.id} className={`py-2.5 px-3 ${col.width || ""}`}>
+                        <div className="flex items-center justify-between gap-1 group">
+                          <span>{col.label}</span>
+                          {col.id !== "name" && col.id !== "amount" && (
+                            <button
+                              title={`Remove ${col.label} column`}
+                              onClick={() => handleRemoveColumn(col.id)}
+                              className="text-slate-400 hover:text-rose-600 opacity-60 group-hover:opacity-100 transition-opacity ml-1"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                    <th className="py-2.5 px-3 w-10 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {billData.items.map((line: any, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="py-2 px-3">
-                        <input
-                          type="text"
-                          value={line.name}
-                          onChange={(e) => handleLineChange(idx, "name", e.target.value)}
-                          className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 px-3">
-                        <input
-                          type="number"
-                          value={line.qty}
-                          onChange={(e) => handleLineChange(idx, "qty", parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 px-3">
-                        <input
-                          type="number"
-                          value={line.rate}
-                          onChange={(e) => handleLineChange(idx, "rate", parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 px-3">
-                        <select
-                          value={line.gstRate}
-                          onChange={(e) => handleLineChange(idx, "gstRate", parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
-                        >
-                          <option value={0}>0%</option>
-                          <option value={5}>5%</option>
-                          <option value={12}>12%</option>
-                          <option value={18}>18%</option>
-                          <option value={28}>28%</option>
-                        </select>
-                      </td>
-                      <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                        ₹{(line.amount || 0).toFixed(2)}
-                      </td>
-                      <td className="py-2 px-3">
+                      {activeColumns.map((col) => {
+                        if (col.id === "gstRate") {
+                          return (
+                            <td key={col.id} className="py-2 px-3">
+                              <select
+                                value={line.gstRate !== undefined ? line.gstRate : 18}
+                                onChange={(e) => handleLineChange(idx, "gstRate", parseFloat(e.target.value) || 0)}
+                                className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
+                              >
+                                <option value={0}>0%</option>
+                                <option value={5}>5%</option>
+                                <option value={9}>9%</option>
+                                <option value={12}>12%</option>
+                                <option value={18}>18%</option>
+                                <option value={28}>28%</option>
+                              </select>
+                            </td>
+                          );
+                        }
+
+                        if (col.id === "amount") {
+                          return (
+                            <td key={col.id} className="py-2 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                              ₹{(Number(line.amount) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </td>
+                          );
+                        }
+
+                        if (col.type === "number") {
+                          return (
+                            <td key={col.id} className="py-2 px-3">
+                              <input
+                                type="number"
+                                value={line[col.id] !== undefined ? line[col.id] : ""}
+                                onChange={(e) => handleLineChange(idx, col.id, parseFloat(e.target.value) || 0)}
+                                className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
+                              />
+                            </td>
+                          );
+                        }
+
+                        return (
+                          <td key={col.id} className="py-2 px-3">
+                            <input
+                              type="text"
+                              value={line[col.id] || ""}
+                              onChange={(e) => handleLineChange(idx, col.id, e.target.value)}
+                              className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2 py-1"
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-3 text-center">
                         <button
                           onClick={() => removeLine(idx)}
-                          className="text-slate-400 hover:text-rose-600"
+                          className="text-slate-400 hover:text-rose-600 p-1"
+                          title="Delete row"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -421,21 +680,83 @@ export default function OcrBillImportPage() {
             </div>
           </div>
 
-          {/* Totals Summary */}
+          {/* Dynamic Totals Summary Breakdown */}
           <div className="flex justify-end pt-2">
-            <div className="w-64 space-y-1.5 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="w-80 space-y-2 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex justify-between">
                 <span>Sub Total:</span>
-                <span className="font-mono font-bold">₹{billData.subTotal.toFixed(2)}</span>
+                <span className="font-mono font-bold text-slate-800">
+                  ₹{(billData.subTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span>Tax Total (GST):</span>
-                <span className="font-mono font-bold">₹{billData.taxTotal.toFixed(2)}</span>
+
+              {Boolean(billData.discountTotal && billData.discountTotal > 0) && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Discount {billData.discountPercent ? `(${billData.discountPercent}%)` : ""}:</span>
+                  <span className="font-mono font-bold">
+                    -₹{(billData.discountTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {Boolean(billData.taxableAmount && billData.taxableAmount > 0) && (
+                <div className="flex justify-between font-medium text-slate-700">
+                  <span>Taxable Amount:</span>
+                  <span className="font-mono">
+                    ₹{(billData.taxableAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {Boolean(billData.cgstTotal && billData.cgstTotal > 0) && (
+                <div className="flex justify-between">
+                  <span>CGST:</span>
+                  <span className="font-mono">
+                    ₹{(billData.cgstTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {Boolean(billData.sgstTotal && billData.sgstTotal > 0) && (
+                <div className="flex justify-between">
+                  <span>SGST:</span>
+                  <span className="font-mono">
+                    ₹{(billData.sgstTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              {Boolean(billData.igstTotal && billData.igstTotal > 0) && (
+                <div className="flex justify-between">
+                  <span>IGST:</span>
+                  <span className="font-mono">
+                    ₹{(billData.igstTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 text-xs font-semibold text-slate-700">
+                <span>Total Tax:</span>
+                <span className="font-mono">
+                  ₹{(billData.taxTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-bold text-slate-900">
+
+              <div className="flex justify-between border-t border-slate-300 pt-2 text-sm font-bold text-slate-900">
                 <span>Grand Total:</span>
-                <span className="font-mono text-emerald-700">₹{billData.grandTotal.toFixed(2)}</span>
+                <span className="font-mono text-emerald-700 text-base">
+                  ₹{(billData.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
               </div>
+
+              {Boolean(billData.earlyPayAmount && billData.earlyPayAmount > 0) && (
+                <div className="flex justify-between pt-1 border-t border-dashed border-slate-200 text-[11px] text-indigo-700">
+                  <span>EarlyPay Amount (Disc ₹{billData.earlyPayDiscount}):</span>
+                  <span className="font-mono font-bold">
+                    ₹{(billData.earlyPayAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
