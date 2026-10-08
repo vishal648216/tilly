@@ -365,19 +365,19 @@ export default function NewPurchaseOrderForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="table w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[1150px]">
             <thead className="bg-slate-100/70 text-slate-600 border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-center">#</th>
-                <th className="py-2.5 px-3 min-w-[200px]">Item Description</th>
-                <th className="py-2.5 px-3 w-24">HSN</th>
-                <th className="py-2.5 px-3 w-20 text-right">Qty</th>
-                <th className="py-2.5 px-3 w-20">Unit</th>
-                <th className="py-2.5 px-3 w-28 text-right">Purchase Rate (₹)</th>
-                <th className="py-2.5 px-3 w-20 text-right">Disc (%)</th>
-                <th className="py-2.5 px-3 w-24 text-center">GST %</th>
-                <th className="py-2.5 px-3 w-28 text-right">Taxable</th>
-                <th className="py-2.5 px-3 w-28 text-right">Total (₹)</th>
+                <th className="py-2.5 px-3 min-w-[240px]">Item Description</th>
+                <th className="py-2.5 px-2.5 w-24 min-w-[85px]">HSN</th>
+                <th className="py-2.5 px-2.5 w-28 min-w-[105px] text-right">Qty</th>
+                <th className="py-2.5 px-2.5 w-20 min-w-[75px]">Unit</th>
+                <th className="py-2.5 px-2.5 w-32 min-w-[115px] text-right">Purchase Rate (₹)</th>
+                <th className="py-2.5 px-2.5 w-24 min-w-[90px] text-right">Disc (%)</th>
+                <th className="py-2.5 px-2.5 w-28 min-w-[100px] text-center">GST %</th>
+                <th className="py-2.5 px-3 w-28 min-w-[105px] text-right">Taxable</th>
+                <th className="py-2.5 px-3 w-32 min-w-[125px] text-right">Total (₹)</th>
                 <th className="py-2.5 px-2 w-10 text-center"></th>
               </tr>
             </thead>
@@ -392,7 +392,7 @@ export default function NewPurchaseOrderForm({
                       <select
                         value={line.itemId}
                         onChange={(e) => updateLine(line.key, "itemId", e.target.value)}
-                        className="select w-full text-xs font-semibold py-1 h-8"
+                        className="select w-full text-xs font-semibold px-2 py-1 h-8"
                       >
                         <option value="">-- Choose Item or Custom --</option>
                         {items.map((it) => (
@@ -406,65 +406,65 @@ export default function NewPurchaseOrderForm({
                         placeholder="Item name / raw material..."
                         value={line.name}
                         onChange={(e) => updateLine(line.key, "name", e.target.value)}
-                        className="input w-full text-xs py-1 h-7"
+                        className="input w-full text-xs px-2.5 py-1 h-7"
                         required
                       />
                     </div>
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <input
                       type="text"
                       placeholder="HSN"
                       value={line.hsn}
                       onChange={(e) => updateLine(line.key, "hsn", e.target.value)}
-                      className="input w-full text-xs py-1 h-8"
+                      className="input w-full text-xs px-2 py-1 h-8 font-mono"
                     />
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <input
                       type="number"
                       min="0.01"
                       step="any"
                       value={line.qty}
                       onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right py-1 h-8 font-semibold"
+                      className="input w-full text-xs text-right px-2 py-1 h-8 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <input
                       type="text"
                       value={line.unit}
                       onChange={(e) => updateLine(line.key, "unit", e.target.value)}
-                      className="input w-full text-xs py-1 h-8 uppercase"
+                      className="input w-full text-xs text-center px-2 py-1 h-8 uppercase font-medium"
                     />
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <input
                       type="number"
                       min="0"
                       step="any"
                       value={line.rate}
                       onChange={(e) => updateLine(line.key, "rate", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right py-1 h-8"
+                      className="input w-full text-xs text-right px-2 py-1 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <input
                       type="number"
                       min="0"
                       step="any"
                       value={line.discount}
                       onChange={(e) => updateLine(line.key, "discount", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right py-1 h-8"
+                      className="input w-full text-xs text-right px-2 py-1 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-2.5">
                     <select
                       value={line.gstRate}
                       onChange={(e) => updateLine(line.key, "gstRate", parseFloat(e.target.value) || 0)}
-                      className="select w-full text-xs text-center py-1 h-8 font-semibold"
+                      className="select w-full text-xs text-center px-2 py-1 h-8 font-semibold"
                     >
                       <option value="0">0%</option>
                       <option value="5">5%</option>
@@ -473,10 +473,10 @@ export default function NewPurchaseOrderForm({
                       <option value="28">28%</option>
                     </select>
                   </td>
-                  <td className="py-2.5 px-3 text-right font-medium text-slate-700">
+                  <td className="py-2.5 px-3 text-right font-medium text-slate-700 whitespace-nowrap">
                     {formatCurrency(line.taxable)}
                   </td>
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                  <td className="py-2.5 px-3 text-right font-bold text-slate-900 whitespace-nowrap">
                     {formatCurrency(line.total)}
                   </td>
                   <td className="py-2.5 px-2 text-center">
