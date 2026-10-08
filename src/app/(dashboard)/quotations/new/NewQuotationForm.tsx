@@ -252,7 +252,7 @@ export default function NewQuotationForm({
               Customer / Client <span className="text-red-500">*</span>
             </label>
             <select
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="select w-full text-xs h-10 font-medium"
               value={partyId}
               onChange={(e) => setPartyId(e.target.value)}
               required
@@ -274,11 +274,12 @@ export default function NewQuotationForm({
             <div className="relative">
               <input
                 type="date"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="input w-full text-xs pr-8 h-10 font-medium"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
               />
+              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
             </div>
           </div>
 
@@ -287,12 +288,15 @@ export default function NewQuotationForm({
             <label className="mb-1 block text-xs font-semibold text-slate-700">
               Valid Until <span className="text-slate-400 font-normal">(Validity)</span>
             </label>
-            <input
-              type="date"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              value={validUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                type="date"
+                className="input w-full text-xs pr-8 h-10 font-medium"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
+              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 

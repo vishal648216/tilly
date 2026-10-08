@@ -261,16 +261,16 @@ export default function NewPurchaseOrderForm({
           Supplier & Order Details
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Supplier */}
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Vendor / Supplier <span className="text-red-500">*</span>
             </label>
             <select
               value={partyId}
               onChange={(e) => setPartyId(e.target.value)}
-              className="select w-full text-xs"
+              className="select w-full text-xs h-10 font-medium"
               required
             >
               <option value="">-- Select Supplier / Vendor --</option>
@@ -281,7 +281,7 @@ export default function NewPurchaseOrderForm({
               ))}
             </select>
             {selectedParty && (
-              <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
                 <span>State: {selectedParty.state || "Not specified"}</span>
                 {isInterState ? (
                   <span className="font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
@@ -304,8 +304,9 @@ export default function NewPurchaseOrderForm({
             <select
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
-              className="select w-full text-xs"
+              className="select w-full text-xs h-10 font-medium"
             >
+              <option value="">-- Select Godown / Warehouse --</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} {w.isDefault ? "(Default)" : ""}
@@ -322,10 +323,10 @@ export default function NewPurchaseOrderForm({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="input w-full text-xs pr-8"
+                className="input w-full text-xs pr-8 h-10 font-medium"
                 required
               />
-              <Calendar className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
             </div>
           </div>
 
@@ -339,9 +340,9 @@ export default function NewPurchaseOrderForm({
                 type="date"
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
-                className="input w-full text-xs pr-8"
+                className="input w-full text-xs pr-8 h-10 font-medium"
               />
-              <Calendar className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
             </div>
           </div>
         </div>
