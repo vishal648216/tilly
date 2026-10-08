@@ -59,7 +59,7 @@ export default async function PartiesPage({
           <div className="p-12 text-center text-slate-400">
             <Users className="h-10 w-10 mx-auto text-slate-300 mb-2" />
             <p className="text-base font-medium text-slate-600">
-              {query ? `"${query}" ke liye koi party nahi mili.` : "Koi party nahi hai abhi."}
+              {query ? `No parties found matching "${query}".` : "No parties added yet."}
             </p>
             {query ? (
               <Link href="/parties" className="btn-secondary mt-4 inline-flex">
@@ -67,7 +67,7 @@ export default async function PartiesPage({
               </Link>
             ) : (
               <Link href="/parties/new" className="btn-primary mt-4 inline-flex items-center gap-1.5">
-                <Plus className="h-4 w-4" /> Pehla party add karo
+                <Plus className="h-4 w-4" /> Add First Party
               </Link>
             )}
           </div>

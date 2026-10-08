@@ -171,13 +171,13 @@ export async function createInvoice(input: CreateInvoiceInput) {
     const match = finalOrderNo.match(poPattern);
     if (!match) {
       throw new Error(
-        `Invalid Order Ref format: "${finalOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). Format change nahi hona chahiye.`
+        `Invalid Order Ref format: "${finalOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). The format cannot be changed.`
       );
     }
     const poYear = parseInt(match[1], 10);
     if (poYear !== currentYear) {
       throw new Error(
-        `Year in PO number must be current year (${currentYear}). Year ${poYear} allow nahi hai.`
+        `Year in PO number must be the current year (${currentYear}). Year ${poYear} is not allowed.`
       );
     }
     const existingDuplicateOrder = await prisma.invoice.findFirst({
@@ -190,7 +190,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     });
     if (existingDuplicateOrder) {
       throw new Error(
-        `Order Reference "${finalOrderNo}" pehle se hi invoice ${existingDuplicateOrder.invoiceNo} me exist karta hai! Duplicate number allow nahi hai.`
+        `Order Reference "${finalOrderNo}" already exists in invoice ${existingDuplicateOrder.invoiceNo}! Duplicate references are not allowed.`
       );
     }
   }

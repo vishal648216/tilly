@@ -114,9 +114,11 @@ export default function TwoStepDeleteModal({
               )}
 
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 leading-relaxed">
-                <p className="font-semibold text-amber-800">Kya aap sachme is bill ko delete karna chahte hain?</p>
+                <p className="font-semibold text-amber-800">
+                  Are you sure you want to delete this {itemTypeLabel.toLowerCase()}?
+                </p>
                 <p className="mt-1 text-[11px] text-amber-700">
-                  Is bill se jude saare inventory stock movements aur accounting ledger entries remove/reverse ho jayenge.
+                  All associated inventory movements, ledger vouchers, and payment allocations for this document will be reversed or removed.
                 </p>
               </div>
 
@@ -157,10 +159,10 @@ export default function TwoStepDeleteModal({
 
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900 space-y-2">
                 <p className="font-bold text-rose-950 text-sm">
-                  Pakka delete karna he: <span className="font-mono underline">{itemIdentifier}</span>?
+                  Confirm permanent deletion of: <span className="font-mono underline">{itemIdentifier}</span>?
                 </p>
                 <p className="text-[11px] leading-relaxed text-rose-800">
-                  Yeh aapka 2nd aur aakhri confirmation hai. Confirm karne ke baad yeh {itemTypeLabel.toLowerCase()} system se permanently delete ho jayega aur dobara recover nahi ho sakega.
+                  This is your second and final confirmation. Once confirmed, this {itemTypeLabel.toLowerCase()} will be permanently removed from the system and cannot be restored.
                 </p>
               </div>
 

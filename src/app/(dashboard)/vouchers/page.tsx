@@ -36,9 +36,9 @@ export default async function VouchersPage() {
             <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
               <BookOpen className="h-6 w-6" />
             </div>
-            <p className="text-slate-600 font-medium">Koi voucher nahi hai.</p>
+            <p className="text-slate-600 font-medium">No vouchers found.</p>
             <Link href="/vouchers/new" className="btn-primary mt-4 inline-flex items-center gap-1.5">
-              <Plus className="h-4 w-4" /> Pehla entry banao
+              <Plus className="h-4 w-4" /> Create First Voucher Entry
             </Link>
           </div>
         ) : (

@@ -182,8 +182,8 @@ export default function SignupPage() {
 
           <h2 className="text-2xl font-bold text-slate-900">Registration Submitted!</h2>
           <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-            Aapka registration safalta-purvak receive ho gaya hai. Suraksha ke liye har naye business account ko{" "}
-            <strong className="text-slate-800 font-semibold">Super Admin dwara verify</strong> kiya jata hai.
+            Your registration has been received successfully. For security reasons, every new business account is{" "}
+            <strong className="text-slate-800 font-semibold">reviewed and verified by the Super Admin</strong>.
           </p>
 
           <div className="mt-6 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 text-left text-xs space-y-2">
@@ -208,7 +208,7 @@ export default function SignupPage() {
           </div>
 
           <p className="mt-6 text-xs text-slate-400">
-            Jaise hi Super Admin aapki request accept karenge, aap apne email aur password se turant login kar sakenge.
+            Once approved by the Super Admin, you will be able to sign in immediately using your email and password.
           </p>
 
           <div className="mt-6">
@@ -636,12 +636,12 @@ export default function SignupPage() {
 
         {/* Footer Login Link */}
         <p className="mt-6 text-center text-sm text-slate-500">
-          Pehle se account hai?{" "}
+          Already have an account?{" "}
           <Link
             href="/login"
             className="font-semibold text-emerald-600 transition hover:text-emerald-700 hover:underline"
           >
-            Sign in / Login karein
+            Sign in / Log in
           </Link>
         </p>
       </div>

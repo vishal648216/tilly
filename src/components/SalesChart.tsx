@@ -7,7 +7,7 @@ export default function SalesChart({ data }: { data: Bar[] }) {
   if (data.length === 0 || data.every((d) => d.value === 0)) {
     return (
       <p className="py-8 text-center text-sm text-slate-400">
-        Abhi koi sales data nahi hai. Invoice banao to graph dikhega!
+        No sales data available yet. Create invoices to view the sales trend chart.
       </p>
     );
   }

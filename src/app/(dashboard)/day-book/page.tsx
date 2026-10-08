@@ -75,9 +75,9 @@ export default async function DayBookPage({
               <BookOpen className="h-6 w-6" />
             </div>
             <p className="text-slate-600 font-medium">
-              Is date pe koi transaction nahi hai.
+              No transactions recorded on this date.
             </p>
-            <p className="text-sm text-slate-400 mt-1">Doosri date select karein.</p>
+            <p className="text-sm text-slate-400 mt-1">Please select another date.</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">

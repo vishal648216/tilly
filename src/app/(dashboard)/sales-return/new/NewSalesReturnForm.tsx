@@ -316,13 +316,13 @@ export default function NewSalesReturnForm({
 
         {/* Reason for Return */}
         <div className="sm:col-span-2">
-          <label className="label">Return Reason (Kaaran)</label>
+          <label className="label">Return Reason</label>
           <select className="input" value={reason} onChange={(e) => setReason(e.target.value)}>
-            <option value="Damaged / Defective Goods">Damaged / Defective Goods (Kharab Saman)</option>
-            <option value="Wrong Item Delivered">Wrong Item Delivered (Galat Item Gaya)</option>
-            <option value="Quality Dissatisfaction">Quality Issue (Quality Pasand Nahi Aayi)</option>
+            <option value="Damaged / Defective Goods">Damaged / Defective Goods</option>
+            <option value="Wrong Item Delivered">Wrong Item Delivered</option>
+            <option value="Quality Dissatisfaction">Quality Issue / Dissatisfaction</option>
             <option value="Customer Exchanged / Cancelled">Customer Exchanged / Cancelled</option>
-            <option value="Excess Quantity Supplied">Excess Quantity Supplied (Zyada Bheja)</option>
+            <option value="Excess Quantity Supplied">Excess Quantity Supplied</option>
             <option value="Other">Other / Miscellaneous</option>
           </select>
         </div>

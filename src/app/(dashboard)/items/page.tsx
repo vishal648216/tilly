@@ -79,7 +79,7 @@ export default async function ItemsPage({
               <Package className="h-6 w-6" />
             </div>
             <p className="text-slate-600 font-medium">
-              {query ? `"${query}" ke liye koi item nahi mila.` : "Koi item nahi hai abhi."}
+              {query ? `No items found matching "${query}".` : "No items added yet."}
             </p>
             {query ? (
               <Link href="/items" className="btn-secondary mt-4 inline-flex">
@@ -87,7 +87,7 @@ export default async function ItemsPage({
               </Link>
             ) : (
               <Link href="/items/new" className="btn-primary mt-4 inline-flex items-center gap-1.5">
-                <Plus className="h-4 w-4" /> Pehla item add karo
+                <Plus className="h-4 w-4" /> Add First Item
               </Link>
             )}
           </div>

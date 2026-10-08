@@ -202,16 +202,16 @@ export default function SalesReturnClient({
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-3">
               <RotateCcw className="h-6 w-6" />
             </div>
-            <h3 className="font-semibold text-slate-800">Koi Sales Return record nahi mila</h3>
+            <h3 className="font-semibold text-slate-800">No Sales Return records found</h3>
             <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-              Jab koi customer saman wapas kare, toh Sales Return (Credit Note) create karein.
+              When a customer returns goods, record a Sales Return (Credit Note) to adjust stock and balance.
             </p>
             <Link
               href="/sales-return/new"
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition"
             >
               <Plus className="h-3.5 w-3.5" />
-              Pehla Sales Return banayein
+              Create First Sales Return
             </Link>
           </div>
         ) : (

@@ -125,7 +125,7 @@ export default function LoginPage() {
             </div>
             {touched.email && email && !isEmailValid && (
               <p className="mt-1 text-xs text-red-600">
-                Valid email format enter karein (jaise: demo@taily.in)
+                Please enter a valid email address (e.g. demo@taily.in)
               </p>
             )}
           </div>
@@ -183,7 +183,7 @@ export default function LoginPage() {
           {/* Testing Accounts Quick Access Box */}
           <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-center">
             <p className="text-xs font-medium text-slate-700">
-              Testing ke liye 1-Click Auto Fill karein:
+              1-Click Auto Fill for testing:
             </p>
             <div className="mt-2.5 flex flex-col gap-1.5">
               <div className="flex items-center justify-between rounded-lg bg-white border border-emerald-200 px-3 py-1.5 shadow-sm">

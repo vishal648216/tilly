@@ -123,7 +123,7 @@ export default async function PartyLedgerPage({
           <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
             <Users className="h-6 w-6" />
           </div>
-          <p className="text-slate-600 font-medium">Upar se party select karein.</p>
+          <p className="text-slate-600 font-medium">Please select a party above to view ledger statements.</p>
         </div>
       ) : transactions.length === 0 ? (
         <div className="card p-12 text-center">
@@ -131,7 +131,7 @@ export default async function PartyLedgerPage({
             <BookOpen className="h-6 w-6" />
           </div>
           <p className="text-slate-600 font-medium">
-            {selectedParty?.name} ke saath koi transaction nahi hai.
+            No transactions found for {selectedParty?.name}.
           </p>
         </div>
       ) : (

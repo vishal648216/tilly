@@ -97,7 +97,7 @@ export default function GstrReport({
             {sortedRates.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-6 text-center text-slate-400">
-                  Is period me koi sales nahi thi.
+                  No sales recorded in this tax period.
                 </td>
               </tr>
             ) : (

@@ -134,7 +134,7 @@ export async function POST(req: Request) {
       if (!match) {
         return NextResponse.json(
           {
-            error: `Invalid Order Ref format: "${cleanOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). Format change nahi hona chahiye.`,
+            error: `Invalid Order Ref format: "${cleanOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). The format cannot be changed.`,
           },
           { status: 400 }
         );
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
       if (poYear !== currentYear) {
         return NextResponse.json(
           {
-            error: `Year in PO number must be current year (${currentYear}). Year ${poYear} allow nahi hai.`,
+            error: `Year in PO number must be the current year (${currentYear}). Year ${poYear} is not allowed.`,
           },
           { status: 400 }
         );
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
       if (existing) {
         return NextResponse.json(
           {
-            error: `Order Reference "${cleanOrderNo}" pehle se hi invoice ${existing.invoiceNo} me exist karta hai! Duplicate number allow nahi hai.`,
+            error: `Order Reference "${cleanOrderNo}" already exists in invoice ${existing.invoiceNo}! Duplicate references are not allowed.`,
           },
           { status: 400 }
         );

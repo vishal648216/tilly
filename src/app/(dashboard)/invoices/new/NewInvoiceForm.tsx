@@ -151,14 +151,14 @@ export default function NewInvoiceForm({
     if (!match) {
       return {
         isValid: false,
-        error: `Format must be PO-YYYY-XXX (e.g. PO-${yr}-001). Format change nahi hona chahiye.`,
+        error: `Format must be PO-YYYY-XXX (e.g. PO-${yr}-001). The format cannot be changed.`,
       };
     }
     const enteredYear = parseInt(match[1], 10);
     if (enteredYear !== yr) {
       return {
         isValid: false,
-        error: `Year in PO number must be current year (${yr}). Year ${enteredYear} allow nahi hai.`,
+        error: `Year in PO number must be the current year (${yr}). Year ${enteredYear} is not allowed.`,
       };
     }
     const isDup = orderList.some(
@@ -167,7 +167,7 @@ export default function NewInvoiceForm({
     if (isDup) {
       return {
         isValid: false,
-        error: `PO Reference "${clean}" pehle se hi exist karta hai! Duplicate number allow nahi hai.`,
+        error: `PO Reference "${clean}" already exists! Duplicate references are not allowed.`,
       };
     }
     return { isValid: true, error: "" };
