@@ -11,9 +11,12 @@ async function purgeAllExceptSuperAdmin() {
   console.log("==================================================");
 
   try {
-    // 1. Identify Super Admins to protect
+    // 1. Identify Super Admins to protect (exclude automated test accounts)
     const superAdmins = await prisma.user.findMany({
-      where: { role: "SUPER_ADMIN" },
+      where: {
+        role: "SUPER_ADMIN",
+        NOT: { email: { startsWith: "platform_admin_" } },
+      },
       select: { id: true, email: true, name: true },
     });
 

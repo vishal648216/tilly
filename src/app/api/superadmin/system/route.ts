@@ -113,9 +113,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Confirmation code 'PURGE' is required" }, { status: 400 });
     }
 
-    // Identify super admins
+    // Identify super admins (exclude temporary platform_admin test accounts)
     const superAdmins = await prisma.user.findMany({
-      where: { role: "SUPER_ADMIN" },
+      where: {
+        role: "SUPER_ADMIN",
+        NOT: { email: { startsWith: "platform_admin_" } },
+      },
       select: { id: true, email: true },
     });
 
