@@ -312,20 +312,27 @@ export async function createInvoice(input: CreateInvoiceInput) {
     }
   }
 
-  // 6. VALIDATE AVAILABLE STOCK FOR SALES
+  // 6. VALIDATE AVAILABLE STOCK FOR SALES (Strict inventory protection)
   if (isSales && !isDraft && settings.inventoryEnabled && !settings.negativeStockAllowed) {
+    const itemTotalQtyMap = new Map<string, { name: string; totalQty: number }>();
     for (const line of lines) {
       if (line.itemId) {
-        const available = await getAvailableStock({
-          companyId,
-          itemId: line.itemId,
-          warehouseId,
-        });
-        if (available < line.qty) {
-          throw new Error(
-            `Insufficient stock for "${line.name}". Available: ${available}, Requested: ${line.qty}.`
-          );
-        }
+        const existing = itemTotalQtyMap.get(line.itemId) || { name: line.name, totalQty: 0 };
+        existing.totalQty += line.qty;
+        itemTotalQtyMap.set(line.itemId, existing);
+      }
+    }
+
+    for (const [itemId, info] of itemTotalQtyMap.entries()) {
+      const available = await getAvailableStock({
+        companyId,
+        itemId,
+        warehouseId,
+      });
+      if (available < info.totalQty) {
+        throw new Error(
+          `Insufficient stock for "${info.name}". Available stock: ${available}, Requested: ${info.totalQty}. Cannot create bill with quantity greater than available stock.`
+        );
       }
     }
   }

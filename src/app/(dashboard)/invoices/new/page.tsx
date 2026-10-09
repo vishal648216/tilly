@@ -260,7 +260,13 @@ export default async function NewInvoicePage({
       </h1>
       <NewInvoiceForm
         parties={parties}
-        items={items}
+        items={items.map((it) => ({
+          ...it,
+          stock: Number(it.stock || 0),
+          salePrice: Number(it.salePrice || 0),
+          purchasePrice: Number(it.purchasePrice || 0),
+          gstRate: Number(it.gstRate || 18),
+        }))}
         warehouses={warehouses}
         companyState={company.state}
         invoiceType={invoiceType}

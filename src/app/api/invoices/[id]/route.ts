@@ -171,9 +171,104 @@ export async function PUT(
     const roundedGrandTotal = Math.round(totalWithTax);
     const roundOff = roundTo2(roundedGrandTotal - totalWithTax);
 
+    const { getCompanySettings } = await import("@/lib/featureFlags");
+    const { getAvailableStock, recordStockMovement } = await import("@/lib/inventory");
+    const settings = await getCompanySettings(context.company.id);
+
+    const isSales = existingInvoice.type === "SALES";
+    const isPosted = (status || existingInvoice.status) !== "DRAFT";
+
+    // Track previous quantities per item in this invoice
+    const previousItemQtyMap = new Map<string, number>();
+    for (const pl of existingInvoice.lines) {
+      if (pl.itemId) {
+        const cur = previousItemQtyMap.get(pl.itemId) || 0;
+        previousItemQtyMap.set(pl.itemId, cur + Number(pl.qty));
+      }
+    }
+
+    // Track new requested quantities per item
+    const newItemQtyMap = new Map<string, { name: string; qty: number }>();
+    if (lines && lines.length > 0) {
+      for (const nl of lines) {
+        if (nl.itemId) {
+          const cur = newItemQtyMap.get(nl.itemId) || { name: nl.name || "Item", qty: 0 };
+          cur.qty += parseFloat(nl.qty) || 0;
+          newItemQtyMap.set(nl.itemId, cur);
+        }
+      }
+    }
+
+    // Strict Stock Validation when Editing Sales Invoices
+    if (isSales && isPosted && settings.inventoryEnabled && !settings.negativeStockAllowed && lines && lines.length > 0) {
+      for (const [itemId, info] of newItemQtyMap.entries()) {
+        const prevQty = previousItemQtyMap.get(itemId) || 0;
+        const currentAvail = await getAvailableStock({
+          companyId: context.company.id,
+          itemId,
+          warehouseId: existingInvoice.warehouseId,
+        });
+        const maxAllowed = currentAvail + prevQty;
+        if (info.qty > maxAllowed) {
+          return NextResponse.json(
+            {
+              error: `Insufficient stock for "${info.name}". Available stock in store: ${maxAllowed}, Requested: ${info.qty}. Cannot bill more than available stock.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
-      // If lines provided, replace lines
+      // If lines provided, adjust stock movements and replace lines
       if (lines && lines.length > 0) {
+        // Adjust stock deltas for modified lines
+        if (isSales && isPosted && settings.inventoryEnabled && !settings.negativeStockAllowed) {
+          const allItemIds = new Set([...previousItemQtyMap.keys(), ...newItemQtyMap.keys()]);
+          for (const itemId of allItemIds) {
+            const prevQty = previousItemQtyMap.get(itemId) || 0;
+            const newQty = newItemQtyMap.get(itemId)?.qty || 0;
+            const delta = newQty - prevQty;
+
+            if (delta > 0) {
+              await recordStockMovement(
+                {
+                  companyId: context.company.id,
+                  itemId,
+                  warehouseId: existingInvoice.warehouseId,
+                  movementType: "SALE",
+                  referenceType: "INVOICE",
+                  referenceId: existingInvoice.invoiceNo,
+                  qtyIn: 0,
+                  qtyOut: delta,
+                  notes: `Stock reduction on edited bill #${existingInvoice.invoiceNo}`,
+                  createdBy: context.user.id,
+                  allowNegative: false,
+                },
+                tx
+              );
+            } else if (delta < 0) {
+              await recordStockMovement(
+                {
+                  companyId: context.company.id,
+                  itemId,
+                  warehouseId: existingInvoice.warehouseId,
+                  movementType: "SALE_RETURN",
+                  referenceType: "INVOICE",
+                  referenceId: existingInvoice.invoiceNo,
+                  qtyIn: Math.abs(delta),
+                  qtyOut: 0,
+                  notes: `Stock restored on edited bill #${existingInvoice.invoiceNo}`,
+                  createdBy: context.user.id,
+                  allowNegative: true,
+                },
+                tx
+              );
+            }
+          }
+        }
+
         await tx.invoiceLine.deleteMany({ where: { invoiceId: existingInvoice.id } });
         await tx.invoiceLine.createMany({
           data: builtLines.map((l: any) => ({

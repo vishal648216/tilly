@@ -137,7 +137,7 @@ export async function POST(req: Request) {
           goodsReceiptEnabled: true,
           salespersonEnabled: true,
           priceListsEnabled: true,
-          negativeStockAllowed: true,
+          negativeStockAllowed: false,
           roundOffEnabled: true,
         },
         create: {
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
           goodsReceiptEnabled: true,
           salespersonEnabled: true,
           priceListsEnabled: true,
-          negativeStockAllowed: true,
+          negativeStockAllowed: false,
           roundOffEnabled: true,
         },
       });

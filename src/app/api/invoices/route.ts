@@ -120,6 +120,40 @@ export async function POST(req: Request) {
       }
     }
 
+    // 3b. Validate available stock for sales invoices (Strict inventory protection)
+    if (invoiceType === "SALES" && status !== "DRAFT") {
+      const { getCompanySettings } = await import("@/lib/featureFlags");
+      const { getAvailableStock } = await import("@/lib/inventory");
+      const settings = await getCompanySettings(companyId);
+
+      if (settings.inventoryEnabled && !settings.negativeStockAllowed) {
+        const itemQtyMap = new Map<string, { name: string; qty: number }>();
+        for (const line of lines) {
+          if (line.itemId) {
+            const cur = itemQtyMap.get(line.itemId) || { name: line.name || "Item", qty: 0 };
+            cur.qty += Number(line.qty || 0);
+            itemQtyMap.set(line.itemId, cur);
+          }
+        }
+
+        for (const [itemId, info] of itemQtyMap.entries()) {
+          const available = await getAvailableStock({
+            companyId,
+            itemId,
+            warehouseId: warehouseId || undefined,
+          });
+          if (available < info.qty) {
+            return NextResponse.json(
+              {
+                error: `Insufficient stock for "${info.name}". Available stock in store: ${available}, Requested: ${info.qty}. You cannot bill more than available stock.`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
+
     const invoiceDate = date ? new Date(date) : new Date();
     if (isNaN(invoiceDate.getTime())) {
       return NextResponse.json({ error: "Invalid invoice date provided." }, { status: 400 });

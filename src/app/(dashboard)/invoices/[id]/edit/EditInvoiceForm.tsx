@@ -220,6 +220,35 @@ export default function EditInvoiceForm({
       return;
     }
 
+    // Stock validation for Sales invoices
+    if (invoice.type !== "PURCHASE" && invoice.type !== "PURCHASE_RETURN") {
+      const stockItemMap = new Map<string, { totalQty: number; name: string }>();
+      for (const l of validLines) {
+        if (l.itemId) {
+          const cur = stockItemMap.get(l.itemId) || { totalQty: 0, name: l.name };
+          cur.totalQty += Number(l.qty || 0);
+          stockItemMap.set(l.itemId, cur);
+        }
+      }
+
+      for (const [itemId, info] of stockItemMap.entries()) {
+        const it = items.find((i) => i.id === itemId);
+        if (it && it.type !== "SERVICE") {
+          const prevQty = (invoice.lines || [])
+            .filter((orig: any) => orig.itemId === itemId)
+            .reduce((sum: number, orig: any) => sum + Number(orig.qty || 0), 0);
+          const maxAllowed = Number(it.stock || 0) + prevQty;
+
+          if (info.totalQty > maxAllowed) {
+            setError(
+              `Insufficient stock for "${info.name}". Maximum available stock is ${maxAllowed} ${it.unit || "PCS"}, but you entered ${info.totalQty}. Cannot update bill with quantity exceeding stock.`
+            );
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
@@ -455,53 +484,93 @@ export default function EditInvoiceForm({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {lines.map((line, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
-                    <td className="py-2.5 px-3 space-y-1">
-                      {items.length > 0 && (
-                        <select
-                          value={line.itemId || ""}
-                          onChange={(e) => handleSelectItem(idx, e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 mb-1"
-                        >
-                          <option value="">— Choose from Catalog —</option>
-                          {items.map((it) => (
-                            <option key={it.id} value={it.id}>
-                              {it.name} (₹{it.salePrice || it.purchasePrice})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Item name"
-                        value={line.name}
-                        onChange={(e) => updateLine(idx, "name", e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-900"
-                        required
-                      />
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <input
-                        type="text"
-                        placeholder="HSN"
-                        value={line.hsn || ""}
-                        onChange={(e) => updateLine(idx, "hsn", e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="any"
-                        value={line.qty}
-                        onChange={(e) => updateLine(idx, "qty", parseFloat(e.target.value) || 0)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-right font-semibold"
-                        required
-                      />
-                    </td>
+                {lines.map((line, idx) => {
+                  const it = items.find((i) => i.id === line.itemId);
+                  const isSalesDoc = invoice.type !== "PURCHASE" && invoice.type !== "PURCHASE_RETURN";
+                  let maxAllowedStock: number | null = null;
+                  let isOverStock = false;
+
+                  if (isSalesDoc && it && it.type !== "SERVICE") {
+                    const prevQty = (invoice.lines || [])
+                      .filter((orig: any) => orig.itemId === line.itemId)
+                      .reduce((sum: number, orig: any) => sum + Number(orig.qty || 0), 0);
+                    maxAllowedStock = Number(it.stock || 0) + prevQty;
+                    const totalItemQty = lines
+                      .filter((l) => l.itemId === line.itemId)
+                      .reduce((sum, l) => sum + Number(l.qty || 0), 0);
+                    isOverStock = maxAllowedStock !== null && totalItemQty > maxAllowedStock;
+                  }
+
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="py-2.5 px-3 space-y-1">
+                        {items.length > 0 && (
+                          <select
+                            value={line.itemId || ""}
+                            onChange={(e) => handleSelectItem(idx, e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 mb-1"
+                          >
+                            <option value="">— Choose from Catalog —</option>
+                            {items.map((catItem) => (
+                              <option key={catItem.id} value={catItem.id}>
+                                {catItem.name} (₹{catItem.salePrice || catItem.purchasePrice}) • Stock: {Number(catItem.stock || 0)} {catItem.unit || "PCS"}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <input
+                          type="text"
+                          placeholder="Item name"
+                          value={line.name}
+                          onChange={(e) => updateLine(idx, "name", e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-900"
+                          required
+                        />
+                        {maxAllowedStock !== null && (
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            {isOverStock ? (
+                              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3 shrink-0" />
+                                Stock Exceeded: Max {maxAllowedStock} {line.unit}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                Available Stock: {maxAllowedStock} {line.unit}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <input
+                          type="text"
+                          placeholder="HSN"
+                          value={line.hsn || ""}
+                          onChange={(e) => updateLine(idx, "hsn", e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="any"
+                          value={line.qty}
+                          onChange={(e) => updateLine(idx, "qty", parseFloat(e.target.value) || 0)}
+                          className={`w-full rounded-lg border px-2 py-1 text-xs text-right font-semibold transition-colors ${
+                            isOverStock
+                              ? "border-rose-500 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-rose-500/20"
+                              : "border-slate-200 bg-white text-slate-900 focus:border-emerald-500"
+                          }`}
+                          required
+                        />
+                        {isOverStock && maxAllowedStock !== null && (
+                          <div className="text-[10px] font-bold text-rose-600 text-right mt-0.5">
+                            Max: {maxAllowedStock}
+                          </div>
+                        )}
+                      </td>
                     <td className="py-2.5 px-3 text-right">
                       <input
                         type="number"
@@ -550,7 +619,8 @@ export default function EditInvoiceForm({
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

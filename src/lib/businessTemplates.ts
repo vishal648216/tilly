@@ -259,7 +259,7 @@ export const BUSINESS_TEMPLATES: Record<BusinessType, BusinessTemplateConfig> = 
       goodsReceiptEnabled: false,
       salespersonEnabled: true,
       priceListsEnabled: false,
-      negativeStockAllowed: true,
+      negativeStockAllowed: false,
       taxInclusivePricing: true,
       roundOffEnabled: true,
     },

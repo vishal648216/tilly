@@ -7,7 +7,7 @@ import { prisma } from "./prisma";
 import { Decimal } from "@prisma/client/runtime/library";
 import { roundTo2 } from "./currency";
 import { getCompanySettings } from "./featureFlags";
-import { recordStockMovement, getDefaultWarehouse } from "./inventory";
+import { recordStockMovement, getDefaultWarehouse, getAvailableStock } from "./inventory";
 import { createInvoice } from "./invoice";
 
 // ============================================================================
@@ -628,6 +628,15 @@ export async function createDeliveryChallan(input: CreateDeliveryChallanInput) {
       // Record stock movement if dispatchNow is true and inventory is enabled
       const finalItemId = line.itemId || soLine?.itemId || null;
       if (dispatchNow && settings.inventoryEnabled && finalItemId) {
+        if (!settings.negativeStockAllowed) {
+          const available = await getAvailableStock({ companyId, itemId: finalItemId, warehouseId }, tx);
+          if (available < currentDelivering) {
+            throw new Error(
+              `Insufficient stock for "${line.name || soLine?.name || "Item"}". Available stock in warehouse: ${available}, Requested for delivery: ${currentDelivering}. Cannot create delivery challan exceeding stock.`
+            );
+          }
+        }
+
         await recordStockMovement(
           {
             companyId,

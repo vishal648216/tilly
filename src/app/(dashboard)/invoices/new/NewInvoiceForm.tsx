@@ -598,6 +598,31 @@ export default function NewInvoiceForm({
       }
     }
 
+    // Stock validation for Sales invoices
+    if (!isPurchase && !initialData?.skipStockMovement) {
+      const stockItemMap = new Map<string, { totalQty: number; name: string }>();
+      for (const l of validLines) {
+        if (l.itemId) {
+          const cur = stockItemMap.get(l.itemId) || { totalQty: 0, name: l.name };
+          cur.totalQty += Number(l.qty || 0);
+          stockItemMap.set(l.itemId, cur);
+        }
+      }
+
+      for (const [itemId, info] of stockItemMap.entries()) {
+        const it = itemsList.find((i) => i.id === itemId);
+        if (it && it.type !== "SERVICE") {
+          const avail = Number(it.stock || 0);
+          if (info.totalQty > avail) {
+            setError(
+              `Insufficient stock for "${info.name}". Available stock is ${avail} ${it.unit || "PCS"}, but you entered ${info.totalQty}. You cannot sell more than available stock.`
+            );
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/invoices", {
@@ -993,6 +1018,20 @@ export default function NewInvoiceForm({
                 const lineGst = roundTo2((taxable * Number(line.gstRate || 0)) / 100);
                 const lineTotal = roundTo2(taxable + lineGst);
 
+                const it = itemsList.find((i) => i.id === line.itemId);
+                const availableStock = it ? Number(it.stock || 0) : null;
+                const totalItemQty = line.itemId
+                  ? lines
+                      .filter((l) => l.itemId === line.itemId)
+                      .reduce((sum, l) => sum + Number(l.qty || 0), 0)
+                  : Number(line.qty || 0);
+                const isOverStock =
+                  !isPurchase &&
+                  it &&
+                  it.type !== "SERVICE" &&
+                  availableStock !== null &&
+                  totalItemQty > availableStock;
+
                 return (
                   <tr key={line.key} className="hover:bg-slate-50/50">
                     {/* Item selector & name */}
@@ -1006,7 +1045,7 @@ export default function NewInvoiceForm({
                           <option value="">Custom Item</option>
                           {itemsList.map((i) => (
                             <option key={i.id} value={i.id}>
-                              {i.name} {i.sku ? `[${i.sku}]` : ""}
+                              {i.name} {i.sku ? `[${i.sku}]` : ""} • Stock: {Number(i.stock || 0)} {i.unit || "PCS"}
                             </option>
                           ))}
                         </select>
@@ -1030,6 +1069,20 @@ export default function NewInvoiceForm({
                         onChange={(e) => updateLine(line.key, "name", e.target.value)}
                         required
                       />
+                      {availableStock !== null && !isPurchase && it?.type !== "SERVICE" && (
+                        <div className="flex items-center gap-1.5 pt-1">
+                          {isOverStock ? (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3 shrink-0" />
+                              Stock Exceeded: Available {availableStock} {line.unit}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                              Available Stock: {availableStock} {line.unit}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* SKU */}
@@ -1050,11 +1103,20 @@ export default function NewInvoiceForm({
                         min="0.01"
                         step="any"
                         placeholder="1"
-                        className="input w-full text-right text-xs px-2.5 py-1.5 font-medium"
+                        className={`input w-full text-right text-xs px-2.5 py-1.5 font-medium transition-colors ${
+                          isOverStock
+                            ? "border-rose-500 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-rose-500/20"
+                            : "border-slate-200 bg-white text-slate-900 focus:border-emerald-500"
+                        }`}
                         value={line.qty || ""}
                         onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
                         required
                       />
+                      {isOverStock && availableStock !== null && (
+                        <div className="text-[10px] font-bold text-rose-600 text-right mt-0.5">
+                          Max: {availableStock}
+                        </div>
+                      )}
                     </td>
 
                     {/* Unit */}
