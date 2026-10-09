@@ -64,6 +64,16 @@ export default function NewItemForm() {
       .catch(() => {});
   }, []);
 
+  // Deduplicated vendors list
+  const uniqueVendors = useMemo(() => {
+    const map = new Map<string, (typeof vendors)[0]>();
+    for (const v of vendors) {
+      const key = v.name.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, v);
+    }
+    return Array.from(map.values());
+  }, [vendors]);
+
   function update(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -159,8 +169,40 @@ export default function NewItemForm() {
 
     setLoading(true);
     try {
-      const selectedVendorObj = vendors.find((v) => v.id === selectedSupplierId);
-      const supplierNameToSend = selectedVendorObj ? selectedVendorObj.name : customSupplierName.trim();
+      let supplierIdToUse = selectedSupplierId || null;
+      let supplierNameToUse = "";
+
+      if (selectedSupplierId) {
+        const found = uniqueVendors.find((v) => v.id === selectedSupplierId);
+        supplierNameToUse = found ? found.name : "";
+      } else if (customSupplierName.trim()) {
+        const cleanName = customSupplierName.trim();
+        supplierNameToUse = cleanName;
+
+        const existing = uniqueVendors.find(
+          (v) => v.name.trim().toLowerCase() === cleanName.toLowerCase()
+        );
+        if (existing) {
+          supplierIdToUse = existing.id;
+        } else {
+          // Immediately create party in CRM so it is permanently available!
+          try {
+            const pRes = await fetch("/api/parties", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: cleanName,
+                type: "VENDOR",
+              }),
+            });
+            const pData = await pRes.json();
+            if (pRes.ok && pData.party) {
+              supplierIdToUse = pData.party.id;
+              setVendors((prev) => [pData.party, ...prev]);
+            }
+          } catch {}
+        }
+      }
 
       const payload = {
         name: form.name.trim(),
@@ -180,13 +222,13 @@ export default function NewItemForm() {
         gstRate: parseFloat(form.gstRate) || 0,
         taxMode: "INCLUSIVE",
 
-        supplierId: selectedSupplierId || null,
-        supplierName: supplierNameToSend || null,
-        purchasedFrom: supplierNameToSend || null,
+        supplierId: supplierIdToUse,
+        supplierName: supplierNameToUse || null,
+        purchasedFrom: supplierNameToUse || null,
         customFields: {
-          supplierId: selectedSupplierId || null,
-          supplierName: supplierNameToSend || null,
-          purchasedFrom: supplierNameToSend || null,
+          supplierId: supplierIdToUse,
+          supplierName: supplierNameToUse || null,
+          purchasedFrom: supplierNameToUse || null,
         },
       };
 
@@ -336,33 +378,64 @@ export default function NewItemForm() {
               }`}
               value={selectedSupplierId}
               onChange={(e) => {
-                setSelectedSupplierId(e.target.value);
-                setCustomSupplierName("");
+                if (e.target.value === "__NEW__") {
+                  setIsAddingNewSupplier(true);
+                  setSelectedSupplierId("");
+                  setCustomSupplierName("");
+                } else {
+                  setSelectedSupplierId(e.target.value);
+                  setCustomSupplierName("");
+                }
               }}
               onBlur={() => handleBlur("supplier")}
             >
               <option value="">-- Select Supplier / Company --</option>
-              {vendors.map((v) => (
+              {uniqueVendors.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name} {v.city ? `(${v.city})` : ""}
                 </option>
               ))}
+              <option value="__NEW__" className="font-semibold text-emerald-700">
+                ➕ + Add New Supplier / Company...
+              </option>
             </select>
           ) : (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className={`input text-xs h-10 flex-1 ${
-                  touched.supplier && validationErrors.supplier ? "border-rose-400 bg-rose-50/20" : ""
-                }`}
-                placeholder="Type supplier / company name..."
-                value={customSupplierName}
-                onChange={(e) => {
-                  setCustomSupplierName(e.target.value);
-                  setSelectedSupplierId("");
-                }}
-                onBlur={() => handleBlur("supplier")}
-              />
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  autoFocus
+                  list="supplier-options"
+                  className={`input text-xs h-10 flex-1 ${
+                    touched.supplier && validationErrors.supplier ? "border-rose-400 bg-rose-50/20" : ""
+                  }`}
+                  placeholder="Type supplier / company name (e.g. Vishal, Ramesh Traders)..."
+                  value={customSupplierName}
+                  onChange={(e) => {
+                    setCustomSupplierName(e.target.value);
+                    setSelectedSupplierId("");
+                  }}
+                  onBlur={() => handleBlur("supplier")}
+                />
+                <datalist id="supplier-options">
+                  {uniqueVendors.map((v) => (
+                    <option key={v.id} value={v.name} />
+                  ))}
+                </datalist>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingNewSupplier(false);
+                    setCustomSupplierName("");
+                  }}
+                  className="rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Choose Existing
+                </button>
+              </div>
+              <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                <span>✓ Automatically saved to your supplier directory for future products and bills</span>
+              </p>
             </div>
           )}
 

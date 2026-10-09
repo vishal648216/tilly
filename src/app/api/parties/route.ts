@@ -30,7 +30,17 @@ export async function GET(req: Request) {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json({ ok: true, parties });
+    const seenNames = new Set<string>();
+    const uniqueParties: typeof parties = [];
+    for (const p of parties) {
+      const normalized = p.name.trim().toLowerCase();
+      if (!seenNames.has(normalized)) {
+        seenNames.add(normalized);
+        uniqueParties.push(p);
+      }
+    }
+
+    return NextResponse.json({ ok: true, parties: uniqueParties });
   } catch (err: any) {
     return handleAuthError(err);
   }

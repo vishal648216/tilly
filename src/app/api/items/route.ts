@@ -164,10 +164,48 @@ export async function POST(req: Request) {
     if (customFields) {
       parsedCustom = typeof customFields === "string" ? JSON.parse(customFields || "{}") : { ...customFields };
     }
-    if (body.supplierId) parsedCustom.supplierId = body.supplierId;
-    if (body.supplierName || body.purchasedFrom) {
-      parsedCustom.supplierName = body.supplierName || body.purchasedFrom;
-      parsedCustom.purchasedFrom = body.supplierName || body.purchasedFrom;
+
+    const supplierNameRaw = (body.supplierName || body.purchasedFrom || parsedCustom.supplierName || parsedCustom.purchasedFrom || "").trim();
+    let resolvedSupplierId = body.supplierId || parsedCustom.supplierId || null;
+
+    if (supplierNameRaw) {
+      if (resolvedSupplierId) {
+        const existingParty = await prisma.party.findFirst({
+          where: { id: resolvedSupplierId, companyId },
+        });
+        if (!existingParty) {
+          resolvedSupplierId = null;
+        }
+      }
+
+      if (!resolvedSupplierId) {
+        // Find existing vendor by name (case-insensitive)
+        const allVendors = await prisma.party.findMany({
+          where: { companyId, type: { in: ["VENDOR", "BOTH"] } },
+          select: { id: true, name: true },
+        });
+        const matched = allVendors.find(
+          (v) => v.name.trim().toLowerCase() === supplierNameRaw.toLowerCase()
+        );
+
+        if (matched) {
+          resolvedSupplierId = matched.id;
+        } else {
+          // Auto-create new Vendor / Supplier Party in CRM so it is permanently saved!
+          const newVendor = await prisma.party.create({
+            data: {
+              companyId,
+              name: supplierNameRaw,
+              type: "VENDOR",
+            },
+          });
+          resolvedSupplierId = newVendor.id;
+        }
+      }
+
+      parsedCustom.supplierId = resolvedSupplierId;
+      parsedCustom.supplierName = supplierNameRaw;
+      parsedCustom.purchasedFrom = supplierNameRaw;
     }
 
     const item = await prisma.$transaction(async (tx) => {
