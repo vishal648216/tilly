@@ -482,12 +482,8 @@ export default function NewInvoiceForm({
     } else if (digits.length === 11 && digits.startsWith("0")) {
       digits = digits.slice(1);
     }
-    if (digits.length !== 10) {
-      setModalError("Mobile number must be exactly 10 digits (e.g. 9876543210).");
-      return;
-    }
-    if (!/^[6-9]\d{9}$/.test(digits)) {
-      setModalError("Mobile number must start with 6, 7, 8, or 9.");
+    if (digits.length < 7 || digits.length > 15) {
+      setModalError("Please enter a valid phone / mobile number (e.g. 10 digits).");
       return;
     }
 
@@ -1565,7 +1561,7 @@ export default function NewInvoiceForm({
                     />
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">
-                    Must be 10 digits starting with 6, 7, 8, or 9.
+                    Enter valid 10-digit mobile or phone number.
                   </p>
                 </div>
 

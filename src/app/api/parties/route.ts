@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Mobile number is required for vendor registration." }, { status: 400 });
     }
     if (cleanPhone && !isValidPhone(cleanPhone)) {
-      return NextResponse.json({ error: "Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9." }, { status: 400 });
+      return NextResponse.json({ error: "Please enter a valid phone / mobile number." }, { status: 400 });
     }
 
     const cleanState = state?.trim();
