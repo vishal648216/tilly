@@ -113,6 +113,7 @@ export default function NewInvoiceForm({
   initialData,
   salespersons = [],
   existingOrderNos = [],
+  nextInvoiceNoPreview,
 }: {
   parties: Party[];
   items: any[];
@@ -122,6 +123,7 @@ export default function NewInvoiceForm({
   initialData?: InitialWorkflowData | null;
   salespersons?: string[];
   existingOrderNos?: string[];
+  nextInvoiceNoPreview?: string;
 }) {
   const router = useRouter();
   const isPurchase = invoiceType === "PURCHASE";
@@ -133,7 +135,7 @@ export default function NewInvoiceForm({
     for (const no of orderList) {
       if (!no) continue;
       const clean = no.trim().toUpperCase();
-      const match = clean.match(/^PO-(\d{4})-(\d+)$/);
+      const match = clean.match(/^(?:PO|SO)-(\d{4})-(\d+)$/);
       if (match && parseInt(match[1], 10) === yr) {
         const seq = parseInt(match[2], 10);
         if (seq > max) max = seq;
@@ -145,10 +147,13 @@ export default function NewInvoiceForm({
   function validatePoNumber(val: string, orderList: string[]): { isValid: boolean; error: string } {
     const clean = val.trim().toUpperCase();
     if (!clean) {
-      return { isValid: false, error: "Customer PO / Order Ref is required." };
+      return {
+        isValid: false,
+        error: `${isPurchase ? "Purchase Order / PO #" : "Customer PO / Order Ref"} is required.`,
+      };
     }
     const yr = new Date().getFullYear();
-    const match = clean.match(/^PO-(\d{4})-(\d{3,})$/i);
+    const match = clean.match(/^(?:PO|SO)-(\d{4})-(\d{3,})$/i);
     if (!match) {
       return {
         isValid: false,
@@ -168,7 +173,7 @@ export default function NewInvoiceForm({
     if (isDup) {
       return {
         isValid: false,
-        error: `PO Reference "${clean}" already exists! Duplicate references are not allowed.`,
+        error: `${isPurchase ? "Purchase Order" : "Order"} Reference "${clean}" already exists in ${isPurchase ? "purchase bills" : "sales invoices"}! Duplicate references are not allowed.`,
       };
     }
     return { isValid: true, error: "" };
@@ -199,6 +204,9 @@ export default function NewInvoiceForm({
   const [existingOrderNosList, setExistingOrderNosList] = useState<string[]>(existingOrderNos);
   const [orderNo, setOrderNo] = useState(
     initialData?.orderNo || computeNextPo(existingOrderNos)
+  );
+  const [invoiceNoPreview, setInvoiceNoPreview] = useState(
+    nextInvoiceNoPreview || (isPurchase ? "PUR-000001" : "INV-000001")
   );
   const [orderNoError, setOrderNoError] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("Immediate");
@@ -684,6 +692,14 @@ export default function NewInvoiceForm({
         setPartySuccessMsg(
           `✓ Successfully posted ${data.invoice.invoiceNo}! Form reset for next transaction.`
         );
+        if (data.invoice?.invoiceNo) {
+          const match = data.invoice.invoiceNo.match(/\d+/g);
+          if (match) {
+            const currentSeq = parseInt(match[match.length - 1], 10);
+            const nextSeq = currentSeq + 1;
+            setInvoiceNoPreview(`${isPurchase ? "PUR" : "INV"}-${String(nextSeq).padStart(6, "0")}`);
+          }
+        }
         setLines([{ ...emptyLine, key: Date.now() }]);
         setSupplierInvoiceNo("");
         const nextOrderList = [...existingOrderNosList, orderNo.trim().toUpperCase()];
@@ -748,8 +764,14 @@ export default function NewInvoiceForm({
 
       {/* Primary Transaction Header */}
       <div className="card p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2 flex items-center justify-between">
-          <span>{isPurchase ? "Vendor & Purchase Details" : "Customer & Sales Details"}</span>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span>{isPurchase ? "Vendor & Purchase Details" : "Customer & Sales Details"}</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-brand-50 text-brand-700 border border-brand-200">
+              <span className="text-[10px] uppercase font-sans tracking-wider text-brand-500 font-semibold">{isPurchase ? "Next Bill #" : "Next Invoice #"}:</span>
+              {invoiceNoPreview}
+            </span>
+          </div>
           <span className="text-xs font-normal normal-case text-slate-400">
             GST Rule: {isInterState ? "Inter-state (IGST)" : "Intra-state (CGST + SGST)"}
           </span>

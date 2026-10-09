@@ -167,22 +167,25 @@ export async function createInvoice(input: CreateInvoiceInput) {
   let finalOrderNo = orderNo ? String(orderNo).trim().toUpperCase() : undefined;
   if (finalOrderNo) {
     const currentYear = new Date().getFullYear();
-    const poPattern = /^PO-(\d{4})-(\d{3,})$/i;
+    const poPattern = /^(?:PO|SO)-(\d{4})-(\d{3,})$/i;
     const match = finalOrderNo.match(poPattern);
-    if (!match) {
+    if (!match && !input.sourceDocType) {
       throw new Error(
         `Invalid Order Ref format: "${finalOrderNo}". Format must be PO-YYYY-XXX (e.g. PO-${currentYear}-001). The format cannot be changed.`
       );
     }
-    const poYear = parseInt(match[1], 10);
-    if (poYear !== currentYear) {
-      throw new Error(
-        `Year in PO number must be the current year (${currentYear}). Year ${poYear} is not allowed.`
-      );
+    if (match) {
+      const poYear = parseInt(match[1], 10);
+      if (poYear !== currentYear) {
+        throw new Error(
+          `Year in PO number must be the current year (${currentYear}). Year ${poYear} is not allowed.`
+        );
+      }
     }
     const existingDuplicateOrder = await prisma.invoice.findFirst({
       where: {
         companyId,
+        type,
         orderNo: { equals: finalOrderNo },
         status: { notIn: ["CANCELLED", "REVERSED"] },
       },
@@ -190,7 +193,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     });
     if (existingDuplicateOrder) {
       throw new Error(
-        `Order Reference "${finalOrderNo}" already exists in invoice ${existingDuplicateOrder.invoiceNo}! Duplicate references are not allowed.`
+        `Order Reference "${finalOrderNo}" already exists in ${type === "PURCHASE" ? "purchase bill" : "sales invoice"} ${existingDuplicateOrder.invoiceNo}! Duplicate references are not allowed.`
       );
     }
   }
@@ -421,16 +424,21 @@ export async function createInvoice(input: CreateInvoiceInput) {
   }
 
   // 8. GENERATE SEQUENTIAL INVOICE & VOUCHER NUMBERS
-  const count = await prisma.invoice.count({ where: { companyId, type } });
-  const lastInvoice = await prisma.invoice.findFirst({
+  const invoicesOfType = await prisma.invoice.findMany({
     where: { companyId, type },
-    orderBy: { createdAt: "desc" },
+    select: { invoiceNo: true },
   });
-  let nextSeq = count + 1;
-  if (lastInvoice) {
-    const parsed = parseInt(lastInvoice.invoiceNo.replace(/\D/g, ""));
-    if (!isNaN(parsed) && parsed >= nextSeq) nextSeq = parsed + 1;
+  let maxSeq = 0;
+  for (const inv of invoicesOfType) {
+    const match = inv.invoiceNo.match(/\d+/g);
+    if (match) {
+      const parsed = parseInt(match[match.length - 1], 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
   }
+  const nextSeq = Math.max(invoicesOfType.length + 1, maxSeq + 1);
   const invoiceNo = `${isSales ? "INV" : "PUR"}-${String(nextSeq).padStart(6, "0")}`;
 
   const vCount = await prisma.voucher.count({ where: { companyId } });

@@ -163,7 +163,7 @@ export async function POST(req: Request) {
     let cleanOrderNo = orderNo && typeof orderNo === "string" ? String(orderNo).trim().toUpperCase() : undefined;
 
     if (cleanOrderNo) {
-      const poPattern = /^PO-(\d{4})-(\d{3,})$/i;
+      const poPattern = /^(?:PO|SO)-(\d{4})-(\d{3,})$/i;
       const match = cleanOrderNo.match(poPattern);
       if (!match) {
         return NextResponse.json(
@@ -185,6 +185,7 @@ export async function POST(req: Request) {
       const existing = await prisma.invoice.findFirst({
         where: {
           companyId,
+          type: invoiceType,
           orderNo: { equals: cleanOrderNo },
           status: { notIn: ["CANCELLED", "REVERSED"] },
         },
@@ -193,7 +194,7 @@ export async function POST(req: Request) {
       if (existing) {
         return NextResponse.json(
           {
-            error: `Order Reference "${cleanOrderNo}" already exists in invoice ${existing.invoiceNo}! Duplicate references are not allowed.`,
+            error: `Order Reference "${cleanOrderNo}" already exists in ${invoiceType === "PURCHASE" ? "purchase bill" : "sales invoice"} ${existing.invoiceNo}! Duplicate references are not allowed.`,
           },
           { status: 400 }
         );
