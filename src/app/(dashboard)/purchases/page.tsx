@@ -22,6 +22,8 @@ export default async function PurchasesPage() {
       purchases={purchases.map((p) => ({
         ...p,
         date: p.date.toISOString(),
+        supplierInvoiceNo: p.supplierInvoiceNo || null,
+        supplierInvoiceDate: p.supplierInvoiceDate ? p.supplierInvoiceDate.toISOString() : null,
         grandTotal: p.grandTotal.toString(),
         paidAmount: p.paidAmount.toString(),
       }))}

@@ -11,6 +11,11 @@ import {
   ArrowLeft,
   Sparkles,
   Plus,
+  Tag,
+  Layers,
+  ShieldAlert,
+  Percent,
+  CheckCircle2,
 } from "lucide-react";
 
 const RETAIL_UNITS = [
@@ -25,6 +30,8 @@ const RETAIL_UNITS = [
   { value: "DOZ", label: "DOZ (Dozens)" },
   { value: "BTL", label: "BTL (Bottles)" },
   { value: "BAG", label: "BAG (Bags)" },
+  { value: "HOURS", label: "HOURS (Service)" },
+  { value: "DAYS", label: "DAYS (Service)" },
 ];
 
 export default function NewItemForm() {
@@ -36,16 +43,23 @@ export default function NewItemForm() {
   const [customSupplierName, setCustomSupplierName] = useState("");
   const [isAddingNewSupplier, setIsAddingNewSupplier] = useState(false);
 
-  // Simple Form State
+  // Form State
   const [form, setForm] = useState({
+    type: "PRODUCT", // PRODUCT, SERVICE
     name: "",
+    sku: "",
     barcode: "",
+    category: "",
+    brand: "",
+    hsn: "",
     unit: "PCS",
     purchasePrice: "", // Cost Price
     salePrice: "", // Selling Price
     mrp: "", // Max Retail Price
     openingStock: "0",
+    minStock: "0",
     gstRate: "18",
+    taxMode: "EXCLUSIVE", // EXCLUSIVE, INCLUSIVE
   });
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -110,19 +124,19 @@ export default function NewItemForm() {
     const errs: Record<string, string> = {};
 
     if (!form.name.trim()) {
-      errs.name = "Product name is required.";
+      errs.name = "Item or service name is required.";
     } else if (form.name.trim().length < 2) {
-      errs.name = "Product name must be at least 2 characters.";
+      errs.name = "Name must be at least 2 characters.";
     }
 
     const saleP = parseFloat(form.salePrice);
-    if (!form.salePrice || isNaN(saleP) || saleP <= 0) {
-      errs.salePrice = "Selling price is required and must be greater than 0.";
+    if (!form.salePrice || isNaN(saleP) || saleP < 0) {
+      errs.salePrice = "Selling price is required and cannot be negative.";
     }
 
     const purP = parseFloat(form.purchasePrice);
-    if (!form.purchasePrice || isNaN(purP) || purP <= 0) {
-      errs.purchasePrice = "Purchase price (cost) is required and must be greater than 0.";
+    if (form.purchasePrice && (isNaN(purP) || purP < 0)) {
+      errs.purchasePrice = "Purchase price cannot be negative.";
     }
 
     const mrpP = parseFloat(form.mrp);
@@ -131,22 +145,22 @@ export default function NewItemForm() {
         errs.mrp = "MRP must be greater than 0.";
       } else if (saleP > mrpP) {
         errs.mrp = `Selling price (₹${saleP}) cannot exceed MRP (₹${mrpP}).`;
-      } else if (purP > mrpP) {
-        errs.mrp = `Purchase cost (₹${purP}) cannot exceed MRP (₹${mrpP}).`;
       }
     }
 
-    if (!selectedSupplierId && !customSupplierName.trim()) {
-      errs.supplier = "Please select or enter the supplier / company purchased from.";
-    }
-
-    const openS = parseFloat(form.openingStock);
-    if (form.openingStock && (isNaN(openS) || openS < 0)) {
-      errs.openingStock = "Opening stock cannot be negative.";
+    if (form.type === "PRODUCT") {
+      const openS = parseFloat(form.openingStock);
+      if (form.openingStock && (isNaN(openS) || openS < 0)) {
+        errs.openingStock = "Opening stock cannot be negative.";
+      }
+      const minS = parseFloat(form.minStock);
+      if (form.minStock && (isNaN(minS) || minS < 0)) {
+        errs.minStock = "Minimum stock cannot be negative.";
+      }
     }
 
     return errs;
-  }, [form.name, form.salePrice, form.purchasePrice, form.mrp, form.openingStock, selectedSupplierId, customSupplierName]);
+  }, [form.name, form.salePrice, form.purchasePrice, form.mrp, form.openingStock, form.minStock, form.type]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,8 +171,8 @@ export default function NewItemForm() {
       salePrice: true,
       purchasePrice: true,
       mrp: true,
-      supplier: true,
       openingStock: true,
+      minStock: true,
     });
 
     if (Object.keys(validationErrors).length > 0) {
@@ -204,23 +218,32 @@ export default function NewItemForm() {
         }
       }
 
+      const isService = form.type === "SERVICE";
       const payload = {
         name: form.name.trim(),
-        type: "PRODUCT",
-        unit: form.unit || "PCS",
-        barcode: form.barcode.trim() || null,
-        sku: form.barcode.trim() ? `SKU-${form.barcode.trim().slice(-6)}` : null,
+        type: form.type,
+        category: form.category.trim() || null,
+        brand: form.brand.trim() || null,
+        hsn: form.hsn.trim() || null,
+        unit: form.unit || (isService ? "HOURS" : "PCS"),
+        barcode: !isService && form.barcode.trim() ? form.barcode.trim() : null,
+        sku: form.sku.trim()
+          ? form.sku.trim()
+          : form.barcode.trim()
+          ? `SKU-${form.barcode.trim().slice(-6)}`
+          : null,
 
         purchasePrice: parseFloat(form.purchasePrice) || 0,
         salePrice: parseFloat(form.salePrice) || 0,
         mrp: form.mrp ? parseFloat(form.mrp) : 0,
 
-        openingStock: form.openingStock ? parseFloat(form.openingStock) : 0,
+        openingStock: isService ? 0 : form.openingStock ? parseFloat(form.openingStock) : 0,
         openingStockCost: parseFloat(form.purchasePrice) || 0,
-        stock: form.openingStock ? parseFloat(form.openingStock) : 0,
+        stock: isService ? 0 : form.openingStock ? parseFloat(form.openingStock) : 0,
+        minStock: isService ? 0 : form.minStock ? parseFloat(form.minStock) : 0,
 
         gstRate: parseFloat(form.gstRate) || 0,
-        taxMode: "INCLUSIVE",
+        taxMode: form.taxMode,
 
         supplierId: supplierIdToUse,
         supplierName: supplierNameToUse || null,
@@ -229,6 +252,8 @@ export default function NewItemForm() {
           supplierId: supplierIdToUse,
           supplierName: supplierNameToUse || null,
           purchasedFrom: supplierNameToUse || null,
+          category: form.category.trim() || null,
+          brand: form.brand.trim() || null,
         },
       };
 
@@ -251,7 +276,7 @@ export default function NewItemForm() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-3xl space-y-5 pb-12">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <div className="flex items-center gap-2">
@@ -263,9 +288,11 @@ export default function NewItemForm() {
           </Link>
           <div>
             <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Package className="h-5 w-5 text-brand-600" /> Add New Item (Retail)
+              <Package className="h-5 w-5 text-brand-600" /> Add Item / Service
             </h1>
-            <p className="text-xs text-slate-500">Quick product entry with purchase supplier & pricing</p>
+            <p className="text-xs text-slate-500">
+              Configure product details, GST rates, tax mode, and inventory stock
+            </p>
           </div>
         </div>
 
@@ -286,11 +313,37 @@ export default function NewItemForm() {
       )}
 
       {/* Main Clean Form Card */}
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-5">
+        {/* Type Selector (Product vs Service) */}
+        <div className="flex items-center gap-3 p-1.5 bg-slate-100 rounded-xl max-w-sm">
+          <button
+            type="button"
+            onClick={() => update("type", "PRODUCT")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+              form.type === "PRODUCT"
+                ? "bg-white text-brand-700 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            📦 Physical Product
+          </button>
+          <button
+            type="button"
+            onClick={() => update("type", "SERVICE")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+              form.type === "SERVICE"
+                ? "bg-white text-brand-700 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            🛠️ Service / Labor
+          </button>
+        </div>
+
         {/* 1. Item Name */}
         <div>
           <label className="block text-xs font-bold text-slate-800 mb-1">
-            Item / Product Name <span className="text-rose-500">*</span>
+            {form.type === "SERVICE" ? "Service Name" : "Item / Product Name"} <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
@@ -301,7 +354,11 @@ export default function NewItemForm() {
                 ? "border-rose-400 bg-rose-50/20 focus:border-rose-500"
                 : ""
             }`}
-            placeholder="e.g. Parle-G 100g, Amul Milk 500ml, Cotton T-Shirt (M)"
+            placeholder={
+              form.type === "SERVICE"
+                ? "e.g. Tailoring / Alteration, Computer Repair, Consultation"
+                : "e.g. Parle-G 100g, Amul Milk 500ml, Cotton T-Shirt (M)"
+            }
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
             onBlur={() => handleBlur("name")}
@@ -311,25 +368,80 @@ export default function NewItemForm() {
           )}
         </div>
 
-        {/* 2. Barcode & Unit */}
+        {/* 2. Category, Brand & HSN/SAC */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+              <Layers className="h-3 w-3 text-slate-400" /> Category (Optional)
+            </label>
+            <input
+              type="text"
+              list="categories-list"
+              className="input text-xs h-9 w-full"
+              placeholder="e.g. Grocery, Apparel"
+              value={form.category}
+              onChange={(e) => update("category", e.target.value)}
+            />
+            <datalist id="categories-list">
+              <option value="General" />
+              <option value="Grocery" />
+              <option value="Electronics" />
+              <option value="Apparel & Clothing" />
+              <option value="Stationery" />
+              <option value="Hardware" />
+              <option value="Pharmacy & Health" />
+              <option value="Services" />
+            </datalist>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+              <Tag className="h-3 w-3 text-slate-400" /> Brand (Optional)
+            </label>
+            <input
+              type="text"
+              className="input text-xs h-9 w-full"
+              placeholder="e.g. Nestle, Britannia"
+              value={form.brand}
+              onChange={(e) => update("brand", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1">
+              HSN / SAC Code (Optional)
+            </label>
+            <input
+              type="text"
+              className="input text-xs h-9 w-full font-mono"
+              placeholder="e.g. 1905, 9983"
+              value={form.hsn}
+              onChange={(e) => update("hsn", e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* 3. Barcode & Unit */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                <Barcode className="h-3.5 w-3.5 text-brand-600" /> Barcode (Optional)
+                <Barcode className="h-3.5 w-3.5 text-brand-600" /> Barcode / SKU (Optional)
               </label>
-              <button
-                type="button"
-                onClick={handleGenerateBarcode}
-                className="text-[11px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1"
-              >
-                <Sparkles className="h-3 w-3" /> Auto
-              </button>
+              {form.type === "PRODUCT" && (
+                <button
+                  type="button"
+                  onClick={handleGenerateBarcode}
+                  className="text-[11px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto
+                </button>
+              )}
             </div>
             <input
               type="text"
               className="input text-xs h-10 w-full font-mono"
-              placeholder="Scan or auto-generate barcode"
+              placeholder={form.type === "SERVICE" ? "Optional service code" : "Scan or enter barcode"}
               value={form.barcode}
               onChange={(e) => update("barcode", e.target.value)}
             />
@@ -353,12 +465,12 @@ export default function NewItemForm() {
           </div>
         </div>
 
-        {/* 3. Purchased From Company / Supplier */}
+        {/* 4. Supplier / Vendor (Optional) */}
         <div className="pt-2 border-t border-slate-100">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-              <Building2 className="h-3.5 w-3.5 text-brand-600" /> Purchased From (Supplier / Company){" "}
-              <span className="text-rose-500">*</span>
+              <Building2 className="h-3.5 w-3.5 text-brand-600" /> Supplier / Vendor{" "}
+              <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <button
               type="button"
@@ -371,11 +483,7 @@ export default function NewItemForm() {
 
           {!isAddingNewSupplier ? (
             <select
-              className={`input text-xs h-10 w-full bg-white font-medium ${
-                touched.supplier && validationErrors.supplier
-                  ? "border-rose-400 bg-rose-50/20 focus:border-rose-500"
-                  : ""
-              }`}
+              className="input text-xs h-10 w-full bg-white font-medium"
               value={selectedSupplierId}
               onChange={(e) => {
                 if (e.target.value === "__NEW__") {
@@ -387,16 +495,15 @@ export default function NewItemForm() {
                   setCustomSupplierName("");
                 }
               }}
-              onBlur={() => handleBlur("supplier")}
             >
-              <option value="">-- Select Supplier / Company --</option>
+              <option value="">-- No Supplier / Direct / Self (Optional) --</option>
               {uniqueVendors.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name} {v.city ? `(${v.city})` : ""}
                 </option>
               ))}
               <option value="__NEW__" className="font-semibold text-emerald-700">
-                ➕ + Add New Supplier / Company...
+                ➕ + Add New Supplier / Vendor...
               </option>
             </select>
           ) : (
@@ -406,16 +513,13 @@ export default function NewItemForm() {
                   type="text"
                   autoFocus
                   list="supplier-options"
-                  className={`input text-xs h-10 flex-1 ${
-                    touched.supplier && validationErrors.supplier ? "border-rose-400 bg-rose-50/20" : ""
-                  }`}
-                  placeholder="Type supplier / company name (e.g. Vishal, Ramesh Traders)..."
+                  className="input text-xs h-10 flex-1"
+                  placeholder="Type supplier name (e.g. Vishal, Ramesh Traders)..."
                   value={customSupplierName}
                   onChange={(e) => {
                     setCustomSupplierName(e.target.value);
                     setSelectedSupplierId("");
                   }}
-                  onBlur={() => handleBlur("supplier")}
                 />
                 <datalist id="supplier-options">
                   {uniqueVendors.map((v) => (
@@ -434,23 +538,22 @@ export default function NewItemForm() {
                 </button>
               </div>
               <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
-                <span>✓ Automatically saved to your supplier directory for future products and bills</span>
+                <span>✓ Will be saved in vendor CRM automatically</span>
               </p>
             </div>
           )}
-
-          {touched.supplier && validationErrors.supplier && (
-            <p className="text-[11px] text-rose-600 font-semibold mt-1">{validationErrors.supplier}</p>
-          )}
         </div>
 
-        {/* 4. Pricing (Purchase Price, Selling Price, MRP) */}
+        {/* 5. Pricing (Purchase Price, Selling Price, MRP) */}
         <div className="pt-2 border-t border-slate-100">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Purchase Price */}
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Purchase Price (Cost) ₹ <span className="text-rose-500">*</span>
+                Purchase Cost ₹{" "}
+                <span className="text-slate-400 font-normal">
+                  {form.type === "SERVICE" ? "(Optional)" : "(Cost)"}
+                </span>
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
@@ -458,7 +561,6 @@ export default function NewItemForm() {
                   type="number"
                   step="any"
                   min="0"
-                  required
                   className={`input text-sm h-10 pl-7 w-full font-bold ${
                     touched.purchasePrice && validationErrors.purchasePrice
                       ? "border-rose-400 bg-rose-50/20"
@@ -542,20 +644,36 @@ export default function NewItemForm() {
           )}
         </div>
 
-        {/* 5. Opening Stock & GST */}
+        {/* 6. Tax Mode & GST Configuration */}
         <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">Current Stock (Quantity)</label>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              className="input text-xs h-10 w-full font-bold"
-              placeholder="0"
-              value={form.openingStock}
-              onChange={(e) => update("openingStock", e.target.value)}
-            />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">Stock present in shop right now</span>
+            <label className="block text-xs font-bold text-slate-800 mb-1">Tax Mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => update("taxMode", "EXCLUSIVE")}
+                className={`py-2 px-3 rounded-lg border text-xs font-semibold transition-all ${
+                  form.taxMode === "EXCLUSIVE"
+                    ? "border-brand-600 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                + Tax Exclusive
+                <span className="block text-[10px] text-slate-400 font-normal">GST added on top</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => update("taxMode", "INCLUSIVE")}
+                className={`py-2 px-3 rounded-lg border text-xs font-semibold transition-all ${
+                  form.taxMode === "INCLUSIVE"
+                    ? "border-brand-600 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                = Tax Inclusive
+                <span className="block text-[10px] text-slate-400 font-normal">MRP / Price incl. GST</span>
+              </button>
+            </div>
           </div>
 
           <div>
@@ -573,6 +691,43 @@ export default function NewItemForm() {
             </select>
           </div>
         </div>
+
+        {/* 7. Stock Tracking (only for physical goods) */}
+        {form.type === "PRODUCT" && (
+          <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Opening Stock (Current Quantity)
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                className="input text-xs h-10 w-full font-bold"
+                placeholder="0"
+                value={form.openingStock}
+                onChange={(e) => update("openingStock", e.target.value)}
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">Present in shop right now</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-500" /> Low Stock Alert Level
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                className="input text-xs h-10 w-full font-medium"
+                placeholder="e.g. 5"
+                value={form.minStock}
+                onChange={(e) => update("minStock", e.target.value)}
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">Alerts when inventory drops below</span>
+            </div>
+          </div>
+        )}
 
         {/* Submit Actions */}
         <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">

@@ -26,6 +26,8 @@ interface Invoice {
   invoiceNo: string;
   date: string;
   party: { id: string; name: string; phone: string | null } | null;
+  supplierInvoiceNo?: string | null;
+  supplierInvoiceDate?: string | null;
   grandTotal: string | number;
   paidAmount: string | number;
   status: string;
@@ -53,21 +55,51 @@ export default function PurchasesClient({
   }
 
   const filtered = purchases.filter((p) => {
-    const matchStatus = statusFilter === "ALL" || p.status === statusFilter;
+    const grand = parseFloat(p.grandTotal.toString()) || 0;
+    const paid = parseFloat(p.paidAmount.toString()) || 0;
+
+    let matchStatus = true;
+    if (statusFilter === "PAID") {
+      matchStatus =
+        p.status === "PAID" ||
+        (grand > 0 && paid >= grand && p.status !== "CANCELLED" && p.status !== "REVERSED");
+    } else if (statusFilter === "PARTIAL") {
+      matchStatus =
+        p.status === "PARTIALLY_PAID" ||
+        p.status === "PARTIAL" ||
+        (paid > 0 && paid < grand && p.status !== "CANCELLED" && p.status !== "REVERSED");
+    } else if (statusFilter === "UNPAID") {
+      matchStatus =
+        (paid === 0 && p.status !== "CANCELLED" && p.status !== "REVERSED" && p.status !== "DRAFT") ||
+        p.status === "POSTED" ||
+        p.status === "UNPAID";
+    } else if (statusFilter === "CANCELLED") {
+      matchStatus = p.status === "CANCELLED" || p.status === "REVERSED";
+    } else if (statusFilter !== "ALL") {
+      matchStatus = p.status === statusFilter;
+    }
+
     const matchSearch =
       p.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.supplierInvoiceNo && p.supplierInvoiceNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (p.party && p.party.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (p.notes && p.notes.toLowerCase().includes(searchTerm.toLowerCase()));
+
     return matchStatus && matchSearch;
   });
 
-  const totalPurchases = purchases.reduce((sum, p) => sum + parseFloat(p.grandTotal.toString()), 0);
-  const totalPaid = purchases.reduce((sum, p) => sum + parseFloat(p.paidAmount.toString()), 0);
-  const totalOutstanding = totalPurchases - totalPaid;
+  // Calculate totals strictly excluding drafts, cancelled, and reversed bills so figures represent real purchases
+  const validPurchases = purchases.filter(
+    (p) => p.status !== "CANCELLED" && p.status !== "REVERSED" && p.status !== "DRAFT"
+  );
+  const totalPurchases = validPurchases.reduce((sum, p) => sum + parseFloat(p.grandTotal.toString()), 0);
+  const totalPaid = validPurchases.reduce((sum, p) => sum + parseFloat(p.paidAmount.toString()), 0);
+  const totalOutstanding = Math.max(0, totalPurchases - totalPaid);
 
   function handleExport() {
     const headers = [
-      "Bill No",
+      "Bill No (Taily)",
+      "Supplier Bill No",
       "Date",
       "Supplier Name",
       "Grand Total",
@@ -80,6 +112,7 @@ export default function PurchasesClient({
       const paid = parseFloat(p.paidAmount.toString());
       return [
         p.invoiceNo,
+        p.supplierInvoiceNo || "-",
         new Date(p.date).toLocaleDateString("en-IN"),
         p.party?.name || "Cash Supplier",
         grand,
@@ -104,6 +137,12 @@ export default function PurchasesClient({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/purchase-orders"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <span>Purchase Orders</span>
+          </Link>
           <Link
             href="/purchase-return"
             className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-100 transition-colors"
@@ -130,12 +169,14 @@ export default function PurchasesClient({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Total Purchases
+            Total Net Purchases
           </p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatCurrency(totalPurchases)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{purchases.length} total purchase bills</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {validPurchases.length} active bills (excludes cancelled/draft)
+          </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -155,7 +196,7 @@ export default function PurchasesClient({
           <p className={`mt-2 text-2xl font-bold ${totalOutstanding > 0 ? "text-amber-600" : "text-slate-900"}`}>
             {formatCurrency(totalOutstanding)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Due to vendors/suppliers</p>
+          <p className="mt-1 text-xs text-slate-500">Net due to vendors</p>
         </div>
       </div>
 
@@ -165,7 +206,7 @@ export default function PurchasesClient({
           <Search className="h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by bill #, supplier name, notes..."
+            placeholder="Search by bill #, supplier bill #, supplier name, notes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full text-sm outline-none bg-transparent"
@@ -176,12 +217,13 @@ export default function PurchasesClient({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-brand-500"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-brand-500 font-medium"
           >
             <option value="ALL">All Status</option>
             <option value="PAID">Paid</option>
-            <option value="PARTIAL">Partial</option>
-            <option value="UNPAID">Unpaid</option>
+            <option value="PARTIAL">Partially Paid</option>
+            <option value="UNPAID">Unpaid / Posted</option>
+            <option value="CANCELLED">Cancelled / Reversed</option>
           </select>
         </div>
       </div>
@@ -192,7 +234,7 @@ export default function PurchasesClient({
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-6 py-3">Bill #</th>
+                <th className="px-6 py-3">Bill / Ref #</th>
                 <th className="px-6 py-3">Date</th>
                 <th className="px-6 py-3">Supplier / Vendor</th>
                 <th className="px-6 py-3 text-right">Grand Total</th>
@@ -218,8 +260,16 @@ export default function PurchasesClient({
                   const pending = grand - paid;
                   return (
                     <tr key={pur.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-6 py-4 font-bold text-brand-600 whitespace-nowrap">
-                        <Link href={`/invoices/${pur.id}`}>{pur.invoiceNo}</Link>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Link href={`/invoices/${pur.id}`} className="font-bold text-brand-600 font-mono hover:underline">
+                          {pur.invoiceNo}
+                        </Link>
+                        {pur.supplierInvoiceNo && (
+                          <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                            <span className="text-slate-400">Supplier Bill: </span>
+                            <span className="font-semibold text-slate-700">{pur.supplierInvoiceNo}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
                         {new Date(pur.date).toLocaleDateString("en-IN", {

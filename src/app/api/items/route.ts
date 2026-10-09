@@ -127,17 +127,23 @@ export async function POST(req: Request) {
     const dealP = parseFloat(dealerPrice) || 0;
     const distP = parseFloat(distributorPrice) || 0;
 
-    // Retail Business strict validations for physical products
+    // Flexible validations for products and services
+    if (saleP < 0) {
+      return NextResponse.json(
+        { error: "Sale Price cannot be negative." },
+        { status: 400 }
+      );
+    }
+    if (purP < 0) {
+      return NextResponse.json(
+        { error: "Purchase / Cost Price cannot be negative." },
+        { status: 400 }
+      );
+    }
     if (resolvedType === "PRODUCT") {
-      if (saleP <= 0) {
+      if (saleP <= 0 && purP <= 0) {
         return NextResponse.json(
-          { error: "Retail Selling Price (Sale Price) is required and must be greater than 0." },
-          { status: 400 }
-        );
-      }
-      if (purP <= 0) {
-        return NextResponse.json(
-          { error: "Purchase / Cost Price is required and must be greater than 0." },
+          { error: "Please specify either a selling price or a purchase cost." },
           { status: 400 }
         );
       }

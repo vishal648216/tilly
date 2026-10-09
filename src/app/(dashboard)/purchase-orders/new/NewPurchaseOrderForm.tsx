@@ -1,69 +1,57 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { roundTo2, formatCurrency } from "@/lib/currency";
+import Link from "next/link";
+import { formatCurrency } from "@/lib/currency";
 import {
+  ArrowLeft,
   Plus,
   Trash2,
-  ShoppingCart,
   Calendar,
-  AlertCircle,
+  Building2,
   Warehouse as WarehouseIcon,
-  Sparkles,
+  Save,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
-type Party = {
+interface PartyOption {
   id: string;
   name: string;
-  state: string | null;
+  phone: string | null;
   gstin: string | null;
-  phone?: string | null;
-  city?: string | null;
-};
+  state: string | null;
+}
 
-type Item = {
+interface ItemOption {
   id: string;
   name: string;
   sku: string | null;
   unit: string;
   hsn: string | null;
-  purchasePrice: any;
-  salePrice: any;
-  gstRate: any;
-};
+  purchasePrice: number | string;
+  gstRate: number | string;
+}
 
-type Warehouse = {
+interface WarehouseOption {
   id: string;
   name: string;
   isDefault: boolean;
-};
+}
 
-type Line = {
-  key: number;
-  itemId: string;
+interface FormLine {
+  id: string;
+  itemId?: string;
   name: string;
-  sku: string;
+  sku?: string;
   unit: string;
-  hsn: string;
-  qty: number;
+  hsn?: string;
+  orderedQty: number;
   rate: number;
   discount: number;
   gstRate: number;
-};
-
-const emptyLine: Line = {
-  key: 0,
-  itemId: "",
-  name: "",
-  sku: "",
-  unit: "PCS",
-  hsn: "",
-  qty: 1,
-  rate: 0,
-  discount: 0,
-  gstRate: 18,
-};
+}
 
 export default function NewPurchaseOrderForm({
   parties,
@@ -71,294 +59,394 @@ export default function NewPurchaseOrderForm({
   warehouses,
   companyState,
 }: {
-  parties: Party[];
-  items: Item[];
-  warehouses: Warehouse[];
-  companyState: string | null;
+  parties: PartyOption[];
+  items: ItemOption[];
+  warehouses: WarehouseOption[];
+  companyState?: string;
 }) {
   const router = useRouter();
 
-  const [partyId, setPartyId] = useState("");
+  const [poNo, setPoNo] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [expectedDate, setExpectedDate] = useState("");
+  const [partyId, setPartyId] = useState(parties[0]?.id || "");
   const [warehouseId, setWarehouseId] = useState(
     warehouses.find((w) => w.isDefault)?.id || warehouses[0]?.id || ""
   );
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-
-  const defaultExpected = new Date();
-  defaultExpected.setDate(defaultExpected.getDate() + 10);
-  const [expectedDate, setExpectedDate] = useState(defaultExpected.toISOString().slice(0, 10));
-
+  const [isInterState, setIsInterState] = useState(false);
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState(
-    "1. Delivery as per schedule specified.\n2. Invoices must include our PO number.\n3. Goods must meet standard quality specifications."
+    "1. Delivery within agreed schedule.\n2. Goods subject to quality inspection at warehouse."
   );
 
-  const [lines, setLines] = useState<Line[]>([{ ...emptyLine, key: Date.now() }]);
-  const [error, setError] = useState("");
+  const [lines, setLines] = useState<FormLine[]>([
+    {
+      id: "1",
+      name: "",
+      unit: "PCS",
+      orderedQty: 1,
+      rate: 0,
+      discount: 0,
+      gstRate: 18,
+    },
+  ]);
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const selectedParty = parties.find((p) => p.id === partyId);
+  // Check state when supplier changes
+  const handlePartyChange = (selectedPartyId: string) => {
+    setPartyId(selectedPartyId);
+    const selectedParty = parties.find((p) => p.id === selectedPartyId);
+    if (selectedParty?.state && companyState) {
+      setIsInterState(
+        selectedParty.state.trim().toLowerCase() !==
+          companyState.trim().toLowerCase()
+      );
+    }
+  };
 
-  const isInterState = useMemo(() => {
-    if (!selectedParty?.state || !companyState) return false;
-    return selectedParty.state.trim().toLowerCase() !== companyState.trim().toLowerCase();
-  }, [selectedParty, companyState]);
+  const handleSelectItem = (lineIdx: number, selectedItemId: string) => {
+    const found = items.find((i) => i.id === selectedItemId);
+    if (!found) return;
 
-  function updateLine(key: number, field: keyof Line, value: any) {
     setLines((prev) =>
-      prev.map((line) => {
-        if (line.key !== key) return line;
-
-        const updated = { ...line, [field]: value };
-
-        if (field === "itemId") {
-          const selected = items.find((i) => i.id === value);
-          if (selected) {
-            updated.name = selected.name;
-            updated.sku = selected.sku || "";
-            updated.unit = selected.unit || "PCS";
-            updated.hsn = selected.hsn || "";
-            // Use purchase price if available, else sale price
-            updated.rate = Number(selected.purchasePrice || selected.salePrice) || 0;
-            updated.gstRate = Number(selected.gstRate) || 0;
-          }
-        }
-
-        return updated;
+      prev.map((l, idx) => {
+        if (idx !== lineIdx) return l;
+        return {
+          ...l,
+          itemId: found.id,
+          name: found.name,
+          sku: found.sku || "",
+          unit: found.unit || "PCS",
+          hsn: found.hsn || "",
+          rate: Number(found.purchasePrice) || 0,
+          gstRate: Number(found.gstRate) || 0,
+        };
       })
     );
-  }
+  };
 
-  function addLine() {
-    setLines((prev) => [...prev, { ...emptyLine, key: Date.now() }]);
-  }
+  const handleAddLine = () => {
+    setLines((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        name: "",
+        unit: "PCS",
+        orderedQty: 1,
+        rate: 0,
+        discount: 0,
+        gstRate: 18,
+      },
+    ]);
+  };
 
-  function removeLine(key: number) {
+  const handleRemoveLine = (idx: number) => {
     if (lines.length <= 1) return;
-    setLines((prev) => prev.filter((l) => l.key !== key));
-  }
+    setLines((prev) => prev.filter((_, i) => i !== idx));
+  };
 
-  const computedLines = useMemo(() => {
-    return lines.map((l) => {
-      const gross = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      const discountPercent = Number(l.discount) || 0;
-      const discountAmt = roundTo2((gross * discountPercent) / 100);
-      const taxable = Math.max(0, gross - discountAmt);
-      const gstRate = Number(l.gstRate) || 0;
+  const updateLine = (idx: number, patch: Partial<FormLine>) => {
+    setLines((prev) =>
+      prev.map((l, i) => (i === idx ? { ...l, ...patch } : l))
+    );
+  };
 
-      let cgst = 0;
-      let sgst = 0;
-      let igst = 0;
+  // Calculations
+  const calculatedLines = lines.map((l) => {
+    const gross = (Number(l.orderedQty) || 0) * (Number(l.rate) || 0);
+    const disc = Number(l.discount) || 0;
+    const taxable = Math.max(0, gross - disc);
+    const gstPct = Number(l.gstRate) || 0;
+    const tax = (taxable * gstPct) / 100;
+    const total = taxable + tax;
+    return {
+      ...l,
+      gross,
+      taxable,
+      tax,
+      total,
+    };
+  });
 
-      if (gstRate > 0) {
-        if (isInterState) {
-          igst = roundTo2((taxable * gstRate) / 100);
-        } else {
-          const half = gstRate / 2;
-          cgst = roundTo2((taxable * half) / 100);
-          sgst = roundTo2((taxable * half) / 100);
-        }
-      }
+  const subTotal = calculatedLines.reduce((s, l) => s + l.gross, 0);
+  const discountTotal = calculatedLines.reduce((s, l) => s + (Number(l.discount) || 0), 0);
+  const taxableTotal = calculatedLines.reduce((s, l) => s + l.taxable, 0);
+  const taxTotal = calculatedLines.reduce((s, l) => s + l.tax, 0);
+  const grandTotal = taxableTotal + taxTotal;
 
-      const taxAmount = igst > 0 ? igst : cgst + sgst;
-      const total = roundTo2(taxable + taxAmount);
-
-      return {
-        ...l,
-        discountAmt,
-        taxable: roundTo2(taxable),
-        cgst,
-        sgst,
-        igst,
-        taxAmount,
-        total,
-      };
-    });
-  }, [lines, isInterState]);
-
-  const subTotal = roundTo2(computedLines.reduce((acc, l) => acc + l.taxable, 0));
-  const totalDiscount = roundTo2(computedLines.reduce((acc, l) => acc + l.discountAmt, 0));
-  const totalTax = roundTo2(computedLines.reduce((acc, l) => acc + l.taxAmount, 0));
-  const grandTotal = roundTo2(subTotal + totalTax);
-
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError(null);
 
     if (!partyId) {
-      setError("Please select a vendor / supplier for this purchase order.");
+      setError("Please select a supplier/vendor.");
       return;
     }
 
-    const validLines = lines.filter((l) => l.name.trim() && Number(l.qty) > 0);
+    const validLines = lines.filter((l) => l.name.trim() && l.orderedQty > 0);
     if (validLines.length === 0) {
-      setError("Please add at least one item with a valid quantity and description.");
+      setError("Please add at least one line item with valid product name and quantity.");
       return;
     }
 
     setLoading(true);
-
     try {
-      const payload = {
-        partyId,
-        warehouseId: warehouseId || undefined,
-        date,
-        expectedDate: expectedDate || undefined,
-        notes: notes.trim() || undefined,
-        terms: terms.trim() || undefined,
-        status: "CONFIRMED",
-        isInterState,
-        items: validLines.map((l) => {
-          const gross = Number(l.qty) * Number(l.rate);
-          const discAmt = roundTo2((gross * Number(l.discount || 0)) / 100);
-          return {
-            itemId: l.itemId || undefined,
-            name: l.name.trim(),
-            sku: l.sku?.trim() || undefined,
-            unit: l.unit || "PCS",
-            hsn: l.hsn?.trim() || undefined,
-            qty: Number(l.qty),
-            rate: Number(l.rate),
-            discount: discAmt,
-            gstRate: Number(l.gstRate || 0),
-          };
-        }),
-      };
-
       const res = await fetch("/api/purchase-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          poNo: poNo.trim() || undefined,
+          date,
+          expectedDate: expectedDate || undefined,
+          partyId,
+          warehouseId: warehouseId || undefined,
+          isInterState,
+          notes,
+          terms,
+          status: "CONFIRMED",
+          items: validLines.map((l) => ({
+            itemId: l.itemId || undefined,
+            name: l.name.trim(),
+            sku: l.sku || undefined,
+            unit: l.unit || "PCS",
+            hsn: l.hsn || undefined,
+            orderedQty: Number(l.orderedQty),
+            rate: Number(l.rate),
+            discount: Number(l.discount) || 0,
+            gstRate: Number(l.gstRate) || 0,
+          })),
+        }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create purchase order.");
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to create Purchase Order");
       }
 
       router.push(`/purchase-orders/${data.purchaseOrder.id}`);
       router.refresh();
     } catch (err: any) {
-      setError(err.message || "Failed to create purchase order. Please try again.");
+      setError(err.message || "Failed to save purchase order");
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const selectedParty = parties.find((p) => p.id === partyId);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-6xl mx-auto pb-12">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/purchase-orders"
+            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">New Purchase Order (PO)</h1>
+            <p className="text-xs text-slate-500">
+              Create an official procurement order for your supplier
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/purchase-orders"
+            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20 disabled:opacity-50 active:scale-95 transition-all"
+          >
+            <Save className="h-4 w-4" />
+            <span>{loading ? "Generating PO..." : "Create & Confirm PO"}</span>
+          </button>
+        </div>
+      </div>
+
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Primary Supplier & PO Info */}
-      <div className="card p-5 space-y-4">
-        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-          <ShoppingCart className="h-4 w-4 text-indigo-600" />
-          Supplier & Order Details
-        </h3>
+      {/* Main Form Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Supplier & Warehouse Details */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Building2 className="h-4 w-4 text-brand-600" /> Supplier & Order Details
+            </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Supplier */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Vendor / Supplier <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={partyId}
-              onChange={(e) => setPartyId(e.target.value)}
-              className="select w-full text-xs h-10 font-medium"
-              required
-            >
-              <option value="">-- Select Supplier / Vendor --</option>
-              {parties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.city ? `(${p.city})` : ""} {p.gstin ? `[GSTIN: ${p.gstin}]` : ""}
-                </option>
-              ))}
-            </select>
-            {selectedParty && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                <span>State: {selectedParty.state || "Not specified"}</span>
-                {isInterState ? (
-                  <span className="font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                    Inter-State (IGST)
-                  </span>
-                ) : (
-                  <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
-                    Intra-State (CGST + SGST)
-                  </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Supplier / Vendor <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={partyId}
+                  onChange={(e) => handlePartyChange(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  required
+                >
+                  <option value="">Select Supplier</option>
+                  {parties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.gstin ? `(${p.gstin})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedParty && (
+                  <div className="mt-2 text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-wrap gap-x-4 gap-y-1">
+                    {selectedParty.phone && <span>📞 {selectedParty.phone}</span>}
+                    {selectedParty.gstin && <span>GST: {selectedParty.gstin}</span>}
+                    {selectedParty.state && <span>State: {selectedParty.state}</span>}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Receiving Godown */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Destination Godown / Warehouse
-            </label>
-            <select
-              value={warehouseId}
-              onChange={(e) => setWarehouseId(e.target.value)}
-              className="select w-full text-xs h-10 font-medium"
-            >
-              <option value="">-- Select Godown / Warehouse --</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name} {w.isDefault ? "(Default)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Destination Warehouse
+                </label>
+                <select
+                  value={warehouseId}
+                  onChange={(e) => setWarehouseId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                >
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} {w.isDefault ? "(Default)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-          {/* Date */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">PO Date</label>
-            <div className="relative">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  PO Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Auto (e.g. PO-0001)"
+                  value={poNo}
+                  onChange={(e) => setPoNo(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-mono outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  PO Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium outline-none focus:border-brand-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Expected Delivery Date
+                </label>
+                <input
+                  type="date"
+                  value={expectedDate}
+                  onChange={(e) => setExpectedDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center gap-2">
               <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="input w-full text-xs pr-8 h-10 font-medium"
-                required
+                type="checkbox"
+                id="isInterState"
+                checked={isInterState}
+                onChange={(e) => setIsInterState(e.target.checked)}
+                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 h-4 w-4"
               />
-              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+              <label htmlFor="isInterState" className="text-xs font-medium text-slate-700 cursor-pointer">
+                Inter-state procurement (IGST applies instead of CGST + SGST)
+              </label>
             </div>
           </div>
+        </div>
 
-          {/* Expected Delivery */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Expected Delivery Date
-            </label>
-            <div className="relative">
-              <input
-                type="date"
-                value={expectedDate}
-                onChange={(e) => setExpectedDate(e.target.value)}
-                className="input w-full text-xs pr-8 h-10 font-medium"
-              />
-              <Calendar className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+        {/* Right Column: Order Summary & Actions */}
+        <div className="space-y-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Procurement Summary
+            </h2>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal (Gross)</span>
+                <span className="font-medium text-slate-900">{formatCurrency(subTotal)}</span>
+              </div>
+              {discountTotal > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span>Line Discounts</span>
+                  <span className="font-medium">-{formatCurrency(discountTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-slate-600">
+                <span>Taxable Amount</span>
+                <span className="font-medium text-slate-900">{formatCurrency(taxableTotal)}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Total GST</span>
+                <span className="font-medium text-slate-900">{formatCurrency(taxTotal)}</span>
+              </div>
+              <div className="border-t border-slate-100 pt-3 flex justify-between items-baseline">
+                <span className="text-sm font-bold text-slate-900">Grand Total</span>
+                <span className="text-xl font-bold text-brand-600">
+                  {formatCurrency(grandTotal)}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20 disabled:opacity-50 active:scale-98 transition-all"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>{loading ? "Saving Order..." : "Confirm & Save Order"}</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Items Section */}
-      <div className="card overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-600" />
-            <h3 className="text-sm font-bold text-slate-800">Purchased Items & Material</h3>
-          </div>
+      {/* Line Items Table */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Order Items & Procurement Quantities
+          </h2>
           <button
             type="button"
-            onClick={addLine}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition"
+            onClick={handleAddLine}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-bold transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Item</span>
@@ -366,208 +454,175 @@ export default function NewPurchaseOrderForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[1150px]">
-            <thead className="bg-slate-100/70 text-slate-600 border-b border-slate-200">
+          <table className="w-full text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-2.5 px-3 w-10 text-center">#</th>
-                <th className="py-2.5 px-3 min-w-[240px]">Item Description</th>
-                <th className="py-2.5 px-2.5 w-24 min-w-[85px]">HSN</th>
-                <th className="py-2.5 px-2.5 w-28 min-w-[105px] text-right">Qty</th>
-                <th className="py-2.5 px-2.5 w-20 min-w-[75px]">Unit</th>
-                <th className="py-2.5 px-2.5 w-32 min-w-[115px] text-right">Purchase Rate (₹)</th>
-                <th className="py-2.5 px-2.5 w-24 min-w-[90px] text-right">Disc (%)</th>
-                <th className="py-2.5 px-2.5 w-28 min-w-[100px] text-center">GST %</th>
-                <th className="py-2.5 px-3 w-28 min-w-[105px] text-right">Taxable</th>
-                <th className="py-2.5 px-3 w-32 min-w-[125px] text-right">Total (₹)</th>
-                <th className="py-2.5 px-2 w-10 text-center"></th>
+                <th className="px-4 py-3 min-w-[220px]">Item Description</th>
+                <th className="px-3 py-3 w-24">Unit</th>
+                <th className="px-3 py-3 w-28 text-right">Order Qty</th>
+                <th className="px-3 py-3 w-32 text-right">Rate (₹)</th>
+                <th className="px-3 py-3 w-24 text-right">Disc (₹)</th>
+                <th className="px-3 py-3 w-24 text-center">GST %</th>
+                <th className="px-4 py-3 w-32 text-right">Amount (₹)</th>
+                <th className="px-3 py-3 w-12 text-center"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {computedLines.map((line, idx) => (
-                <tr key={line.key} className="hover:bg-slate-50/50">
-                  <td className="py-2.5 px-3 text-center text-slate-400 font-medium">
-                    {idx + 1}
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <div className="space-y-1">
-                      <select
-                        value={line.itemId}
-                        onChange={(e) => updateLine(line.key, "itemId", e.target.value)}
-                        className="select w-full text-xs font-semibold px-2 py-1 h-8"
-                      >
-                        <option value="">-- Choose Item or Custom --</option>
-                        {items.map((it) => (
-                          <option key={it.id} value={it.id}>
-                            {it.name} {it.sku ? `(${it.sku})` : ""} - ₹{Number(it.purchasePrice || it.salePrice || 0)}
-                          </option>
-                        ))}
-                      </select>
+              {lines.map((line, idx) => {
+                const calc = calculatedLines[idx];
+                return (
+                  <tr key={line.id} className="hover:bg-slate-50/50">
+                    <td className="px-4 py-2.5">
+                      <div className="space-y-1">
+                        <select
+                          value={line.itemId || ""}
+                          onChange={(e) => handleSelectItem(idx, e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-brand-500"
+                        >
+                          <option value="">-- Choose Existing Item --</option>
+                          {items.map((it) => (
+                            <option key={it.id} value={it.id}>
+                              {it.name} {it.sku ? `[${it.sku}]` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          placeholder="Or type custom item name"
+                          value={line.name}
+                          onChange={(e) => updateLine(idx, { name: e.target.value })}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs outline-none focus:border-brand-500"
+                          required
+                        />
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-2.5">
                       <input
                         type="text"
-                        placeholder="Item name / raw material..."
-                        value={line.name}
-                        onChange={(e) => updateLine(line.key, "name", e.target.value)}
-                        className="input w-full text-xs px-2.5 py-1 h-7"
+                        value={line.unit}
+                        onChange={(e) => updateLine(idx, { unit: e.target.value })}
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-center outline-none focus:border-brand-500 font-medium"
+                      />
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right">
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        value={line.orderedQty}
+                        onChange={(e) =>
+                          updateLine(idx, { orderedQty: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-right outline-none focus:border-brand-500 font-bold text-slate-800"
                         required
                       />
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <input
-                      type="text"
-                      placeholder="HSN"
-                      value={line.hsn}
-                      onChange={(e) => updateLine(line.key, "hsn", e.target.value)}
-                      className="input w-full text-xs px-2 py-1 h-8 font-mono"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="any"
-                      value={line.qty}
-                      onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right px-2 py-1 h-8 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      required
-                    />
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <input
-                      type="text"
-                      value={line.unit}
-                      onChange={(e) => updateLine(line.key, "unit", e.target.value)}
-                      className="input w-full text-xs text-center px-2 py-1 h-8 uppercase font-medium"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={line.rate}
-                      onChange={(e) => updateLine(line.key, "rate", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right px-2 py-1 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      required
-                    />
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={line.discount}
-                      onChange={(e) => updateLine(line.key, "discount", parseFloat(e.target.value) || 0)}
-                      className="input w-full text-xs text-right px-2 py-1 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2.5">
-                    <select
-                      value={line.gstRate}
-                      onChange={(e) => updateLine(line.key, "gstRate", parseFloat(e.target.value) || 0)}
-                      className="select w-full text-xs text-center px-2 py-1 h-8 font-semibold"
-                    >
-                      <option value="0">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-medium text-slate-700 whitespace-nowrap">
-                    {formatCurrency(line.taxable)}
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-900 whitespace-nowrap">
-                    {formatCurrency(line.total)}
-                  </td>
-                  <td className="py-2.5 px-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => removeLine(line.key)}
-                      disabled={lines.length <= 1}
-                      className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 transition"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.rate}
+                        onChange={(e) =>
+                          updateLine(idx, { rate: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-right outline-none focus:border-brand-500 font-medium"
+                      />
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.discount}
+                        onChange={(e) =>
+                          updateLine(idx, { discount: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-right outline-none focus:border-brand-500"
+                      />
+                    </td>
+
+                    <td className="px-3 py-2.5 text-center">
+                      <select
+                        value={line.gstRate}
+                        onChange={(e) =>
+                          updateLine(idx, { gstRate: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-center outline-none focus:border-brand-500"
+                      >
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
+                    </td>
+
+                    <td className="px-4 py-2.5 text-right font-bold text-slate-900 whitespace-nowrap">
+                      {formatCurrency(calc.total)}
+                    </td>
+
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLine(idx)}
+                        disabled={lines.length <= 1}
+                        className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Terms, Notes & Summary Calculations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Notes & Terms */}
-        <div className="card p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Instructions for Vendor / Receiving Notes
-            </label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Delivery between 10am-4pm, Material test certificate required..."
-              className="textarea w-full text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Purchase Terms & Conditions
-            </label>
-            <textarea
-              rows={4}
-              value={terms}
-              onChange={(e) => setTerms(e.target.value)}
-              className="textarea w-full text-xs font-mono text-[11px]"
-            />
+        <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleAddLine}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Another Item</span>
+          </button>
+          <div className="text-right text-xs font-semibold text-slate-600">
+            {lines.length} Line {lines.length === 1 ? "Item" : "Items"}
           </div>
         </div>
+      </div>
 
-        {/* Calculation Summary Card */}
-        <div className="card p-5 space-y-3 bg-slate-50/50">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-            PO Financial Summary
-          </h3>
+      {/* Notes & Terms */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Notes & Remarks
+          </label>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Special delivery instructions, contact person, etc."
+            className="w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-brand-500"
+          />
+        </div>
 
-          <div className="flex justify-between text-xs text-slate-600 py-1 border-b border-slate-200">
-            <span>Taxable Subtotal:</span>
-            <span className="font-semibold text-slate-900">{formatCurrency(subTotal)}</span>
-          </div>
-
-          {totalDiscount > 0 && (
-            <div className="flex justify-between text-xs text-emerald-600 py-1 border-b border-slate-200">
-              <span>Discounts:</span>
-              <span className="font-semibold">-{formatCurrency(totalDiscount)}</span>
-            </div>
-          )}
-
-          <div className="flex justify-between text-xs text-slate-600 py-1 border-b border-slate-200">
-            <span>GST Amount ({isInterState ? "IGST" : "CGST + SGST"}):</span>
-            <span className="font-semibold text-slate-900">{formatCurrency(totalTax)}</span>
-          </div>
-
-          <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t-2 border-slate-300">
-            <span>Grand Total:</span>
-            <span className="text-indigo-700">{formatCurrency(grandTotal)}</span>
-          </div>
-
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 disabled:opacity-60 transition"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              <span>{loading ? "Issuing PO..." : "Issue & Save Purchase Order"}</span>
-            </button>
-            <p className="text-[11px] text-center text-slate-400 mt-2">
-              Issues formal Purchase Order to vendor. Stock enters warehouse only upon Goods Receipt (GRN).
-            </p>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Terms & Conditions
+          </label>
+          <textarea
+            rows={3}
+            value={terms}
+            onChange={(e) => setTerms(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-brand-500"
+          />
         </div>
       </div>
     </form>

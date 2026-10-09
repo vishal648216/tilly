@@ -41,6 +41,7 @@ import {
   ScanLine,
   Factory,
   HardDrive,
+  ClipboardList,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -67,6 +68,7 @@ export default function Sidebar({
     {
       title: "Transactions",
       items: [
+        { href: "/pos", label: "POS Counter Sale", icon: CreditCard, badge: "FAST" },
         { href: "/invoices", newHref: "/invoices/new", label: "Invoices (Sales)", icon: Receipt },
         ...(settings.quotationEnabled
           ? [{ href: "/quotations", newHref: "/quotations/new", label: "Quotations", icon: FileText, badge: "QUO" }]
@@ -75,6 +77,7 @@ export default function Sidebar({
           ? [{ href: "/delivery-challans", newHref: "/delivery-challans/new", label: "Delivery Challans", icon: ArrowRight, badge: "DC" }]
           : []),
         { href: "/sales-return", newHref: "/sales-return/new", label: "Sales Return (CN)", icon: RotateCcw },
+        { href: "/purchase-orders", newHref: "/purchase-orders/new", label: "Purchase Orders (PO)", icon: ClipboardList, badge: "PO" },
         { href: "/purchases", newHref: "/invoices/new?type=PURCHASE", label: "Purchases (Bills)", icon: ShoppingCart },
         ...(settings.inventoryEnabled
           ? [{ href: "/purchase-return", newHref: "/purchase-return/new", label: "Vendor Return (DN)", icon: PackageMinus }]
