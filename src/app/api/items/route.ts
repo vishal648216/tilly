@@ -34,7 +34,20 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ ok: true, items });
+    const formatted = items.map((it) => {
+      let custom: any = {};
+      try {
+        if (it.customFields) custom = JSON.parse(it.customFields);
+      } catch {}
+      return {
+        ...it,
+        supplierId: custom.supplierId || null,
+        supplierName: custom.supplierName || custom.purchasedFrom || null,
+        purchasedFrom: custom.purchasedFrom || custom.supplierName || null,
+      };
+    });
+
+    return NextResponse.json({ ok: true, items: formatted });
   } catch (err: any) {
     return handleAuthError(err);
   }
@@ -114,9 +127,48 @@ export async function POST(req: Request) {
     const dealP = parseFloat(dealerPrice) || 0;
     const distP = parseFloat(distributorPrice) || 0;
 
+    // Retail Business strict validations for physical products
+    if (resolvedType === "PRODUCT") {
+      if (saleP <= 0) {
+        return NextResponse.json(
+          { error: "Retail Selling Price (Sale Price) is required and must be greater than 0." },
+          { status: 400 }
+        );
+      }
+      if (purP <= 0) {
+        return NextResponse.json(
+          { error: "Purchase / Cost Price is required and must be greater than 0." },
+          { status: 400 }
+        );
+      }
+      if (mrpP > 0 && saleP > mrpP) {
+        return NextResponse.json(
+          { error: `Retail Sale Price (₹${saleP}) cannot exceed MRP (₹${mrpP}).` },
+          { status: 400 }
+        );
+      }
+      if (mrpP > 0 && purP > mrpP) {
+        return NextResponse.json(
+          { error: `Purchase Price (₹${purP}) cannot exceed MRP (₹${mrpP}).` },
+          { status: 400 }
+        );
+      }
+    }
+
     const openStock = resolvedType === "SERVICE" ? 0 : Math.max(0, parseFloat(openingStock) || 0);
     const currentStock = resolvedType === "SERVICE" ? 0 : Math.max(0, parseFloat(stock) || openStock);
     const minS = resolvedType === "SERVICE" ? 0 : Math.max(0, parseFloat(minStock) || 0);
+
+    // Merge supplier info and custom fields
+    let parsedCustom: Record<string, any> = {};
+    if (customFields) {
+      parsedCustom = typeof customFields === "string" ? JSON.parse(customFields || "{}") : { ...customFields };
+    }
+    if (body.supplierId) parsedCustom.supplierId = body.supplierId;
+    if (body.supplierName || body.purchasedFrom) {
+      parsedCustom.supplierName = body.supplierName || body.purchasedFrom;
+      parsedCustom.purchasedFrom = body.supplierName || body.purchasedFrom;
+    }
 
     const item = await prisma.$transaction(async (tx) => {
       const createdItem = await tx.item.create({
@@ -142,7 +194,7 @@ export async function POST(req: Request) {
           stock: openStock > 0 ? 0 : currentStock,
           minStock: minS,
           openingStock: openStock,
-          openingStockCost: parseFloat(openingStockCost) || 0,
+          openingStockCost: parseFloat(openingStockCost) || purP,
           reorderLevel: parseFloat(reorderLevel) || 0,
           active: active === false ? false : true,
           batchNo: batchNo ? batchNo.trim() : null,
@@ -150,7 +202,7 @@ export async function POST(req: Request) {
           warrantyMonths: warrantyMonths ? parseInt(warrantyMonths) : null,
           model: model ? model.trim() : null,
           imei: imei ? imei.trim() : null,
-          customFields: customFields ? (typeof customFields === "string" ? customFields : JSON.stringify(customFields)) : null,
+          customFields: Object.keys(parsedCustom).length > 0 ? JSON.stringify(parsedCustom) : null,
         },
       });
 

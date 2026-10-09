@@ -109,6 +109,14 @@ export default async function ItemsPage({
               {items.map((i) => {
                 const isService = i.type === "SERVICE";
                 const isLowStock = isInventoryEnabled && !isService && Number(i.stock) <= Number(i.minStock);
+                let supplierName: string | null = null;
+                try {
+                  if (i.customFields) {
+                    const parsed = JSON.parse(i.customFields);
+                    supplierName = parsed.supplierName || parsed.purchasedFrom || null;
+                  }
+                } catch {}
+
                 return (
                   <tr key={i.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-900">
@@ -140,7 +148,12 @@ export default async function ItemsPage({
                         {i.barcode && (
                           <span className="block text-xs font-mono text-slate-400">Barcode: {i.barcode}</span>
                         )}
-                        {!i.category && !i.barcode && !i.brand && "—"}
+                        {supplierName && (
+                          <span className="block text-[11px] text-brand-600 font-semibold mt-0.5">
+                            🏢 Supplier: {supplierName}
+                          </span>
+                        )}
+                        {!i.category && !i.barcode && !i.brand && !supplierName && "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500 font-mono">{i.hsn ?? "—"}</td>
