@@ -33,12 +33,14 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
-  // Platform Purge State
+  // Platform Purge State (TEMPORARILY COMMENTED FOR TESTING)
+  /*
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [purgeConfirmText, setPurgeConfirmText] = useState("");
   const [purging, setPurging] = useState(false);
   const [purgeError, setPurgeError] = useState("");
   const [purgeSuccess, setPurgeSuccess] = useState("");
+  */
 
   async function handleDownloadBackup() {
     setDownloading(true);
@@ -68,6 +70,8 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
     }
   }
 
+  // Purge Execution Handler (TEMPORARILY COMMENTED FOR TESTING)
+  /*
   async function handleExecutePurge() {
     if (purgeConfirmText.trim() !== "PURGE") {
       setPurgeError("Please type PURGE in capital letters to confirm.");
@@ -100,6 +104,7 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
       setPurging(false);
     }
   }
+  */
 
   return (
     <div className="space-y-6">
@@ -247,7 +252,7 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
         </div>
       </div>
 
-      {/* Danger Zone: Factory Reset */}
+      {/* TEMPORARILY COMMENTED FOR TESTING: Danger Zone Factory Reset & Modal
       <div className="rounded-2xl border border-rose-900/60 bg-gradient-to-r from-rose-950/30 via-slate-900/80 to-rose-950/30 p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -284,7 +289,6 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
         </div>
       </div>
 
-      {/* Purge Confirmation Modal */}
       {showPurgeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-lg rounded-2xl bg-slate-900 p-6 shadow-2xl border border-rose-800 space-y-5 animate-in fade-in">
@@ -371,6 +375,7 @@ export default function SystemClient({ dbStats }: { dbStats: DbStats }) {
           </div>
         </div>
       )}
+      */}
     </div>
   );
 }

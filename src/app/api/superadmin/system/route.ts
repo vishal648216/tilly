@@ -98,6 +98,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // TEMPORARILY COMMENTED FOR TESTING
+  return NextResponse.json(
+    { message: "Platform Factory Reset purge feature is temporarily commented out for testing." },
+    { status: 403 }
+  );
+
+  /*
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== "SUPER_ADMIN") {
@@ -202,4 +209,5 @@ export async function POST(req: Request) {
     console.error("Super Admin system purge error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  */
 }
