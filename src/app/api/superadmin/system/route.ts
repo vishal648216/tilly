@@ -96,3 +96,107 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Super Admin access required" }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    if (body.action !== "purge_all_except_superadmin") {
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
+
+    if (body.confirmation !== "PURGE") {
+      return NextResponse.json({ error: "Confirmation code 'PURGE' is required" }, { status: 400 });
+    }
+
+    // Identify super admins
+    const superAdmins = await prisma.user.findMany({
+      where: { role: "SUPER_ADMIN" },
+      select: { id: true, email: true },
+    });
+
+    const superAdminIds = superAdmins.map((u) => u.id);
+
+    // 1. Transactional & manufacturing records
+    await prisma.productionWastage.deleteMany().catch(() => {});
+    await prisma.productionConsumption.deleteMany().catch(() => {});
+    await prisma.productionOrder.deleteMany().catch(() => {});
+    await prisma.bomItem.deleteMany().catch(() => {});
+    await prisma.billOfMaterials.deleteMany().catch(() => {});
+
+    await prisma.paymentAllocation.deleteMany().catch(() => {});
+    await prisma.payment.deleteMany().catch(() => {});
+    await prisma.invoiceLine.deleteMany().catch(() => {});
+    await prisma.invoice.deleteMany().catch(() => {});
+    await prisma.expense.deleteMany().catch(() => {});
+    await prisma.voucherEntry.deleteMany().catch(() => {});
+    await prisma.voucher.deleteMany().catch(() => {});
+
+    await prisma.deliveryChallanLine.deleteMany().catch(() => {});
+    await prisma.deliveryChallan.deleteMany().catch(() => {});
+    await prisma.goodsReceiptLine.deleteMany().catch(() => {});
+    await prisma.goodsReceipt.deleteMany().catch(() => {});
+    await prisma.salesOrderLine.deleteMany().catch(() => {});
+    await prisma.salesOrder.deleteMany().catch(() => {});
+    await prisma.purchaseOrderLine.deleteMany().catch(() => {});
+    await prisma.purchaseOrder.deleteMany().catch(() => {});
+    await prisma.quotationLine.deleteMany().catch(() => {});
+    await prisma.quotation.deleteMany().catch(() => {});
+
+    await prisma.stockMovement.deleteMany().catch(() => {});
+    await prisma.warehouseStock.deleteMany().catch(() => {});
+    await prisma.serialNumber.deleteMany().catch(() => {});
+    await prisma.batch.deleteMany().catch(() => {});
+    await prisma.productVariant.deleteMany().catch(() => {});
+    await prisma.item.deleteMany().catch(() => {});
+    await prisma.warehouse.deleteMany().catch(() => {});
+
+    await prisma.party.deleteMany().catch(() => {});
+    await prisma.account.deleteMany().catch(() => {});
+    await prisma.customFieldDefinition.deleteMany().catch(() => {});
+    await prisma.subscriptionUsage.deleteMany().catch(() => {});
+    await prisma.subscription.deleteMany().catch(() => {});
+    await prisma.invoiceCustomization.deleteMany().catch(() => {});
+    await prisma.ocrScanRecord.deleteMany().catch(() => {});
+    await prisma.importJob.deleteMany().catch(() => {});
+    await prisma.backupLog.deleteMany().catch(() => {});
+    await prisma.platformAuditLog.deleteMany().catch(() => {});
+    await prisma.activityLog.deleteMany().catch(() => {});
+    await prisma.notification.deleteMany().catch(() => {});
+
+    await prisma.companySettings.deleteMany().catch(() => {});
+    await prisma.companyMember.deleteMany().catch(() => {});
+    await prisma.company.deleteMany().catch(() => {});
+
+    // Remove sessions of non-super-admins
+    await prisma.session.deleteMany({
+      where: { userId: { notIn: superAdminIds } },
+    }).catch(() => {});
+
+    // Delete all regular users
+    const deletedUsers = await prisma.user.deleteMany({
+      where: { id: { notIn: superAdminIds } },
+    });
+
+    await logActivity({
+      userId: user.id,
+      userEmail: user.email,
+      action: "PLATFORM_FACTORY_RESET",
+      details: `Super Admin executed full platform wipe. Preserved super admin accounts: ${superAdmins.map((s) => s.email).join(", ")}. Removed ${deletedUsers.count} non-admin users.`,
+    }).catch(() => {});
+
+    return NextResponse.json({
+      ok: true,
+      message: "Platform wiped successfully. All tenant data and non-admin users removed.",
+      deletedUsersCount: deletedUsers.count,
+      preservedSuperAdmins: superAdmins.map((s) => s.email),
+    });
+  } catch (err: any) {
+    console.error("Super Admin system purge error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
