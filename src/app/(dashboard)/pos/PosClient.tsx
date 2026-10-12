@@ -24,6 +24,9 @@ import {
   ArrowLeft,
   Receipt,
   Layers,
+  MessageCircle,
+  Keyboard,
+  Split,
 } from "lucide-react";
 
 interface POSItem {
@@ -74,6 +77,13 @@ interface HeldSale {
   partyId?: string;
 }
 
+export interface SplitDetails {
+  cashAmount: string;
+  onlineAmount: string;
+  onlineMode: "UPI" | "CARD";
+  reference: string;
+}
+
 interface CompletedSaleReceipt {
   invoiceNo: string;
   date: string;
@@ -87,6 +97,12 @@ interface CompletedSaleReceipt {
   paidAmount: number;
   changeDue: number;
   paymentMode: string;
+  splitBreakdown?: {
+    cashAmount: number;
+    onlineAmount: number;
+    onlineMode: string;
+    reference?: string;
+  };
 }
 
 export default function PosClient({
@@ -106,6 +122,7 @@ export default function PosClient({
     city: string | null;
     state: string | null;
     gstin: string | null;
+    upiId?: string | null;
   };
   defaultWarehouseId: string;
 }) {
@@ -116,8 +133,15 @@ export default function PosClient({
   const [customerName, setCustomerName] = useState("Walk-in Cash Customer");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI" | "CARD" | "OTHER">("CASH");
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI" | "CARD" | "SPLIT" | "OTHER">("CASH");
   const [cashReceived, setCashReceived] = useState<string>("");
+  const [splitDetails, setSplitDetails] = useState<SplitDetails>({
+    cashAmount: "",
+    onlineAmount: "",
+    onlineMode: "UPI",
+    reference: "",
+  });
+
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
   const [showHeldModal, setShowHeldModal] = useState(false);
 
@@ -125,6 +149,9 @@ export default function PosClient({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const customerSelectRef = useRef<HTMLSelectElement>(null);
+  const cashInputRef = useRef<HTMLInputElement>(null);
+  const splitCashInputRef = useRef<HTMLInputElement>(null);
 
   // Extract categories
   const categories = useMemo(() => {
@@ -166,7 +193,14 @@ export default function PosClient({
     });
 
     const grandTotal = Math.round((subTotal - discountTotal + taxTotal) * 100) / 100;
-    const received = parseFloat(cashReceived) || (paymentMode !== "CASH" ? grandTotal : 0);
+    let received = grandTotal;
+    if (paymentMode === "CASH") {
+      received = parseFloat(cashReceived) || 0;
+    } else if (paymentMode === "SPLIT") {
+      const c = parseFloat(splitDetails.cashAmount) || 0;
+      const o = parseFloat(splitDetails.onlineAmount) || 0;
+      received = Math.round((c + o) * 100) / 100;
+    }
     const changeDue = Math.max(0, received - grandTotal);
 
     return {
@@ -176,7 +210,7 @@ export default function PosClient({
       grandTotal,
       changeDue: Math.round(changeDue * 100) / 100,
     };
-  }, [cart, cashReceived, paymentMode]);
+  }, [cart, cashReceived, paymentMode, splitDetails]);
 
   // Auto set cash received to exact amount initially if empty
   useEffect(() => {
@@ -184,6 +218,100 @@ export default function PosClient({
       setCashReceived(cartCalculations.grandTotal.toString());
     }
   }, [cartCalculations.grandTotal, paymentMode]);
+
+  // Auto initialize split mode when selected
+  useEffect(() => {
+    if (
+      paymentMode === "SPLIT" &&
+      !splitDetails.cashAmount &&
+      !splitDetails.onlineAmount &&
+      cartCalculations.grandTotal > 0
+    ) {
+      const half = Math.floor(cartCalculations.grandTotal / 2);
+      setSplitDetails((prev) => ({
+        ...prev,
+        cashAmount: half.toString(),
+        onlineAmount: (cartCalculations.grandTotal - half).toFixed(2),
+      }));
+    }
+  }, [cartCalculations.grandTotal, paymentMode]);
+
+  // Fast Split Balance Helpers
+  const handleSplitHelper = (
+    action: "50_50" | "BAL_ONLINE" | "BAL_CASH" | "ALL_CASH" | "ALL_ONLINE"
+  ) => {
+    const total = cartCalculations.grandTotal;
+    if (action === "50_50") {
+      const half = Math.floor(total / 2);
+      setSplitDetails((prev) => ({
+        ...prev,
+        cashAmount: half.toString(),
+        onlineAmount: (total - half).toFixed(2),
+      }));
+    } else if (action === "BAL_ONLINE") {
+      const currentCash = parseFloat(splitDetails.cashAmount) || 0;
+      const rem = Math.max(0, total - currentCash);
+      setSplitDetails((prev) => ({
+        ...prev,
+        onlineAmount: rem.toFixed(2),
+      }));
+    } else if (action === "BAL_CASH") {
+      const currentOnline = parseFloat(splitDetails.onlineAmount) || 0;
+      const rem = Math.max(0, total - currentOnline);
+      setSplitDetails((prev) => ({
+        ...prev,
+        cashAmount: rem.toFixed(2),
+      }));
+    } else if (action === "ALL_CASH") {
+      setSplitDetails((prev) => ({
+        ...prev,
+        cashAmount: total.toString(),
+        onlineAmount: "0",
+      }));
+    } else if (action === "ALL_ONLINE") {
+      setSplitDetails((prev) => ({
+        ...prev,
+        cashAmount: "0",
+        onlineAmount: total.toString(),
+      }));
+    }
+  };
+
+  // WhatsApp Digital Receipt Share
+  const handleShareWhatsApp = (receipt: CompletedSaleReceipt) => {
+    const phone = receipt.customerPhone ? receipt.customerPhone.replace(/\D/g, "") : "";
+    const linesSummary = receipt.items
+      .map((it) => `• ${it.name} x${it.qty} = ₹${(it.qty * it.rate).toFixed(2)}`)
+      .join("\n");
+
+    const splitInfo = receipt.splitBreakdown
+      ? `\n💳 *Split Payment:* Cash ₹${receipt.splitBreakdown.cashAmount} + ${receipt.splitBreakdown.onlineMode} ₹${receipt.splitBreakdown.onlineAmount}${receipt.splitBreakdown.reference ? ` (Ref: ${receipt.splitBreakdown.reference})` : ""}`
+      : "";
+
+    const message = `🧾 *CASH RECEIPT / TAX INVOICE*
+🏢 *${company.name}*
+${company.phone ? `📞 Ph: ${company.phone}\n` : ""}${company.gstin ? `GSTIN: ${company.gstin}\n` : ""}
+-----------------------------
+*Bill No:* ${receipt.invoiceNo}
+*Date:* ${receipt.date}
+*Customer:* ${receipt.customerName}
+-----------------------------
+${linesSummary}
+-----------------------------
+*Subtotal:* ₹${receipt.subTotal.toFixed(2)}
+${receipt.taxTotal > 0 ? `*GST:* ₹${receipt.taxTotal.toFixed(2)}\n` : ""}*Total Amount:* ₹${receipt.grandTotal.toFixed(2)}
+*Paid (${receipt.paymentMode}):* ₹${receipt.paidAmount.toFixed(2)}${splitInfo}
+${receipt.changeDue > 0 ? `*Change Returned:* ₹${receipt.changeDue.toFixed(2)}\n` : ""}
+-----------------------------
+_Policy: Goods exchange within 7 days in original condition with bill._
+Thank you for shopping with us! 🙏`;
+
+    const targetUrl = phone
+      ? `https://wa.me/91${phone.length === 10 ? phone : phone.replace(/^91/, "")}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+    window.open(targetUrl, "_blank");
+  };
 
   // Add item to cart
   const addToCart = (item: POSItem) => {
@@ -320,8 +448,42 @@ export default function PosClient({
       return;
     }
 
-    const { grandTotal, changeDue } = cartCalculations;
-    const paidAmt = paymentMode === "CASH" ? (parseFloat(cashReceived) || grandTotal) : grandTotal;
+    const { grandTotal } = cartCalculations;
+    let paidAmt = grandTotal;
+    let splitBreakdown: CompletedSaleReceipt["splitBreakdown"] = undefined;
+    let splitPayload: any = undefined;
+    let saleNotes = `POS Counter Sale - ${customerName} ${customerPhone ? `(${customerPhone})` : ""}`;
+    let changeDue = 0;
+
+    if (paymentMode === "CASH") {
+      paidAmt = parseFloat(cashReceived) || grandTotal;
+      changeDue = Math.max(0, paidAmt - grandTotal);
+    } else if (paymentMode === "SPLIT") {
+      const c = parseFloat(splitDetails.cashAmount) || 0;
+      const o = parseFloat(splitDetails.onlineAmount) || 0;
+      const totalAllocated = Math.round((c + o) * 100) / 100;
+      if (totalAllocated < grandTotal - 0.01) {
+        alert(
+          `Split payment allocated (₹${totalAllocated.toFixed(2)}) is less than total payable (₹${grandTotal.toFixed(2)}). Please allocate the remaining ₹${(grandTotal - totalAllocated).toFixed(2)} before charging.`
+        );
+        return;
+      }
+      paidAmt = totalAllocated;
+      changeDue = Math.max(0, totalAllocated - grandTotal);
+      splitBreakdown = {
+        cashAmount: c,
+        onlineAmount: o,
+        onlineMode: splitDetails.onlineMode,
+        reference: splitDetails.reference.trim() || undefined,
+      };
+      splitPayload = {
+        cashAmount: c,
+        onlineAmount: o,
+        onlineMode: splitDetails.onlineMode,
+        reference: splitDetails.reference.trim() || undefined,
+      };
+      saleNotes += ` [Split: Cash ₹${c}, ${splitDetails.onlineMode} ₹${o}${splitDetails.reference.trim() ? ` (Ref: ${splitDetails.reference.trim()})` : ""}]`;
+    }
 
     setIsSubmitting(true);
     try {
@@ -335,7 +497,9 @@ export default function PosClient({
           date: new Date().toISOString(),
           paymentMode,
           paidAmount: Math.min(paidAmt, grandTotal),
-          notes: `POS Counter Sale - ${customerName} ${customerPhone ? `(${customerPhone})` : ""}`,
+          paymentReference: paymentMode === "SPLIT" ? splitDetails.reference.trim() || undefined : undefined,
+          splitPaymentDetails: splitPayload,
+          notes: saleNotes,
           lines: cart.map((c) => ({
             itemId: c.itemId || undefined,
             name: c.name,
@@ -373,11 +537,13 @@ export default function PosClient({
         paidAmount: paidAmt,
         changeDue,
         paymentMode,
+        splitBreakdown,
       };
 
       setCompletedReceipt(receipt);
       setCart([]);
       setCashReceived("");
+      setSplitDetails({ cashAmount: "", onlineAmount: "", onlineMode: "UPI", reference: "" });
       setCustomerName("Walk-in Cash Customer");
       setCustomerPhone("");
       setPartyId("");
@@ -387,6 +553,58 @@ export default function PosClient({
       setIsSubmitting(false);
     }
   };
+
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        barcodeInputRef.current?.select();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        customerSelectRef.current?.focus();
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        if (paymentMode === "CASH") {
+          cashInputRef.current?.focus();
+          cashInputRef.current?.select();
+        } else if (paymentMode === "SPLIT") {
+          splitCashInputRef.current?.focus();
+          splitCashInputRef.current?.select();
+        }
+      } else if (e.key === "F9" || (e.ctrlKey && e.key === "Enter")) {
+        e.preventDefault();
+        if (!isSubmitting && cart.length > 0 && !completedReceipt) {
+          handleCompleteSale();
+        }
+      } else if (e.key === "Escape") {
+        if (completedReceipt) {
+          e.preventDefault();
+          setCompletedReceipt(null);
+        } else if (showHeldModal) {
+          e.preventDefault();
+          setShowHeldModal(false);
+        } else if (searchTerm) {
+          e.preventDefault();
+          setSearchTerm("");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    paymentMode,
+    isSubmitting,
+    cart.length,
+    completedReceipt,
+    showHeldModal,
+    searchTerm,
+    splitDetails,
+    cashReceived,
+    cartCalculations.grandTotal,
+  ]);
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-8">
@@ -442,6 +660,40 @@ export default function PosClient({
             <RotateCcw className="h-3.5 w-3.5" />
             <span>Clear Cart</span>
           </button>
+        </div>
+      </div>
+
+      {/* POS Keyboard Shortcuts HUD */}
+      <div className="flex items-center justify-between flex-wrap gap-2 px-3.5 py-2 rounded-xl bg-slate-900 text-slate-300 text-[11px] shadow-sm">
+        <div className="flex items-center gap-2 font-bold text-white">
+          <Keyboard className="h-4 w-4 text-brand-400" />
+          <span>Speed Keys:</span>
+        </div>
+        <div className="flex items-center flex-wrap gap-3 text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-brand-300 font-bold">F2</kbd>
+            <span>Scan/Search</span>
+          </span>
+          <span className="text-slate-700">•</span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">F4</kbd>
+            <span>Customer</span>
+          </span>
+          <span className="text-slate-700">•</span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-emerald-300 font-bold">F8</kbd>
+            <span>Cash Tender</span>
+          </span>
+          <span className="text-slate-700">•</span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-purple-300 font-bold">F9 / Ctrl+Enter</kbd>
+            <span>Charge & Print</span>
+          </span>
+          <span className="text-slate-700">•</span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-rose-300 font-bold">Esc</kbd>
+            <span>Close / Clear</span>
+          </span>
         </div>
       </div>
 
@@ -569,6 +821,7 @@ export default function PosClient({
                   <User className="h-3.5 w-3.5 text-brand-600" /> Customer Information
                 </label>
                 <select
+                  ref={customerSelectRef}
                   value={partyId}
                   onChange={(e) => handleSelectParty(e.target.value)}
                   className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-brand-500 font-medium"
@@ -707,11 +960,11 @@ export default function PosClient({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment Method
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setPaymentMode("CASH")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                       paymentMode === "CASH"
                         ? "border-emerald-500 bg-emerald-50 text-emerald-800 shadow-xs"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -724,7 +977,7 @@ export default function PosClient({
                   <button
                     type="button"
                     onClick={() => setPaymentMode("UPI")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                       paymentMode === "UPI"
                         ? "border-brand-500 bg-brand-50 text-brand-800 shadow-xs"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -737,7 +990,7 @@ export default function PosClient({
                   <button
                     type="button"
                     onClick={() => setPaymentMode("CARD")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                       paymentMode === "CARD"
                         ? "border-purple-500 bg-purple-50 text-purple-800 shadow-xs"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -745,6 +998,19 @@ export default function PosClient({
                   >
                     <CreditCard className="h-4 w-4 text-purple-600" />
                     <span>Card / POS</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode("SPLIT")}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+                      paymentMode === "SPLIT"
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-800 shadow-xs ring-1 ring-indigo-500"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Split className="h-4 w-4 text-indigo-600" />
+                    <span>Split / Multi</span>
                   </button>
                 </div>
               </div>
@@ -755,6 +1021,7 @@ export default function PosClient({
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-xs font-bold text-slate-700">Cash Received ₹</label>
                     <input
+                      ref={cashInputRef}
                       type="number"
                       step="any"
                       min="0"
@@ -792,6 +1059,145 @@ export default function PosClient({
                     <span className="text-base font-extrabold text-emerald-600">
                       {formatCurrency(cartCalculations.changeDue)}
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Split Tender Multi-Payment Interface */}
+              {paymentMode === "SPLIT" && (
+                <div className="p-3.5 rounded-xl bg-indigo-50/50 border border-indigo-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                      <Split className="h-3.5 w-3.5 text-indigo-600" /> Split Payment Breakdown
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      Bill: <strong className="text-slate-800">{formatCurrency(cartCalculations.grandTotal)}</strong>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Cash Component */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                        <Banknote className="h-3 w-3 text-emerald-600" /> Cash Part ₹
+                      </label>
+                      <input
+                        ref={splitCashInputRef}
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={splitDetails.cashAmount}
+                        onChange={(e) =>
+                          setSplitDetails((prev) => ({ ...prev, cashAmount: e.target.value }))
+                        }
+                        placeholder="0.00"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-indigo-500 text-slate-900"
+                      />
+                    </div>
+
+                    {/* Online Component */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <QrCode className="h-3 w-3 text-brand-600" /> Online Part ₹
+                        </label>
+                        <select
+                          value={splitDetails.onlineMode}
+                          onChange={(e) =>
+                            setSplitDetails((prev) => ({
+                              ...prev,
+                              onlineMode: e.target.value as "UPI" | "CARD",
+                            }))
+                          }
+                          className="text-[10px] font-bold bg-white border border-slate-300 rounded px-1 py-0.5 outline-none text-slate-700"
+                        >
+                          <option value="UPI">UPI</option>
+                          <option value="CARD">Card</option>
+                        </select>
+                      </div>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={splitDetails.onlineAmount}
+                        onChange={(e) =>
+                          setSplitDetails((prev) => ({ ...prev, onlineAmount: e.target.value }))
+                        }
+                        placeholder="0.00"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-indigo-500 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Reference input */}
+                  <div>
+                    <input
+                      type="text"
+                      value={splitDetails.reference}
+                      onChange={(e) =>
+                        setSplitDetails((prev) => ({ ...prev, reference: e.target.value }))
+                      }
+                      placeholder="Optional UTR / UPI Ref / Card Txn Auth..."
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] outline-none focus:border-indigo-500 font-mono text-slate-800"
+                    />
+                  </div>
+
+                  {/* Split Quick Balancers */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSplitHelper("50_50")}
+                      className="px-2 py-1 rounded-lg bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                      50 / 50 Split
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSplitHelper("BAL_ONLINE")}
+                      className="px-2 py-1 rounded-lg bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                      Balance to Online
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSplitHelper("BAL_CASH")}
+                      className="px-2 py-1 rounded-lg bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                      Balance to Cash
+                    </button>
+                  </div>
+
+                  {/* Split Allocation Status Badge */}
+                  <div className="pt-2 border-t border-indigo-200 flex items-center justify-between text-xs">
+                    {(() => {
+                      const c = parseFloat(splitDetails.cashAmount) || 0;
+                      const o = parseFloat(splitDetails.onlineAmount) || 0;
+                      const totalAlloc = Math.round((c + o) * 100) / 100;
+                      const target = cartCalculations.grandTotal;
+                      const diff = Math.round((totalAlloc - target) * 100) / 100;
+
+                      if (diff === 0) {
+                        return (
+                          <span className="font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Split Balanced: {formatCurrency(totalAlloc)}
+                          </span>
+                        );
+                      } else if (diff > 0) {
+                        return (
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-slate-600 font-medium">Tendered: {formatCurrency(totalAlloc)}</span>
+                            <span className="font-bold text-emerald-700">Change Due: {formatCurrency(diff)}</span>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-slate-600 font-medium">Tendered: {formatCurrency(totalAlloc)}</span>
+                            <span className="font-bold text-rose-600">Pending: {formatCurrency(Math.abs(diff))}</span>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                 </div>
               )}
@@ -924,10 +1330,30 @@ export default function PosClient({
                   <span>Total:</span>
                   <span>{formatCurrency(completedReceipt.grandTotal)}</span>
                 </div>
-                <div className="flex justify-between text-[10px] pt-1">
+                <div className="flex justify-between text-[10px] pt-1 font-semibold text-slate-800">
                   <span>Paid ({completedReceipt.paymentMode}):</span>
                   <span>{formatCurrency(completedReceipt.paidAmount)}</span>
                 </div>
+
+                {/* Split Details Breakdown */}
+                {completedReceipt.splitBreakdown && (
+                  <div className="pt-1 border-t border-dotted border-slate-300 text-[10px] space-y-0.5 text-slate-600">
+                    <div className="flex justify-between">
+                      <span>• Cash Paid:</span>
+                      <span>{formatCurrency(completedReceipt.splitBreakdown.cashAmount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• {completedReceipt.splitBreakdown.onlineMode} Paid:</span>
+                      <span>{formatCurrency(completedReceipt.splitBreakdown.onlineAmount)}</span>
+                    </div>
+                    {completedReceipt.splitBreakdown.reference && (
+                      <div className="text-[9px] text-slate-500 truncate">
+                        Ref: {completedReceipt.splitBreakdown.reference}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {completedReceipt.changeDue > 0 && (
                   <div className="flex justify-between text-[10px] font-bold text-emerald-700">
                     <span>Change Returned:</span>
@@ -936,28 +1362,75 @@ export default function PosClient({
                 )}
               </div>
 
-              <div className="text-center pt-2 text-[10px] text-slate-400">
-                Thank you! Visit again.
+              {/* UPI & Store Policy Footer */}
+              <div className="text-center pt-2 text-[9px] text-slate-500 border-t border-dashed border-slate-300 space-y-0.5">
+                {company.upiId && <p className="font-semibold text-slate-700">UPI ID: {company.upiId}</p>}
+                <p>Policy: Exchange within 7 days in original condition with bill.</p>
+                <p className="font-bold text-slate-800 text-[10px] pt-0.5">Thank you! Visit again.</p>
               </div>
             </div>
 
-            {/* Print & Next Sale Buttons */}
-            <div className="flex items-center gap-2 pt-2">
+            {/* Print, WhatsApp & Next Sale Action Buttons */}
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
               >
-                <Printer className="h-4 w-4" /> Print Thermal
+                <Printer className="h-4 w-4 text-slate-600" />
+                <span>Print (80mm)</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleShareWhatsApp(completedReceipt)}
+                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                title="Send digital receipt on WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>WhatsApp</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setCompletedReceipt(null)}
-                className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
               >
-                <span>New Sale</span>
+                <span>New Sale [F9 / Esc]</span>
               </button>
             </div>
+
+            {/* Thermal Print Scoped CSS */}
+            <style jsx global>{`
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #printable-pos-receipt,
+                #printable-pos-receipt * {
+                  visibility: visible !important;
+                }
+                #printable-pos-receipt {
+                  position: fixed !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 80mm !important;
+                  max-width: 80mm !important;
+                  margin: 0 !important;
+                  padding: 8px !important;
+                  background: #ffffff !important;
+                  color: #000000 !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  font-size: 11px !important;
+                  line-height: 1.3 !important;
+                }
+                @page {
+                  size: 80mm auto;
+                  margin: 0;
+                }
+              }
+            `}</style>
           </div>
         </div>
       )}

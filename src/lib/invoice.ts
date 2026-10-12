@@ -51,8 +51,14 @@ export type CreateInvoiceInput = {
   freight?: number;  // freight / shipping charges
   otherCharges?: number; // packaging / other charges
   paidAmount?: number; // upfront payment at invoice creation
-  paymentMode?: "CASH" | "BANK" | "UPI" | "CARD" | "CHEQUE" | "OTHER";
+  paymentMode?: "CASH" | "BANK" | "UPI" | "CARD" | "CHEQUE" | "SPLIT" | "OTHER";
   paymentReference?: string;
+  splitPaymentDetails?: {
+    cashAmount: number;
+    onlineAmount: number;
+    onlineMode?: "UPI" | "CARD" | "BANK";
+    reference?: string;
+  };
   lines: InvoiceLineInput[];
   notes?: string;
   customFields?: string;
@@ -94,6 +100,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     paidAmount = 0,
     paymentMode = "CASH",
     paymentReference,
+    splitPaymentDetails,
     status: explicitStatus,
     quickAction,
     createdBy,
@@ -661,15 +668,21 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
     // D. If Upfront Payment Provided, Create Payment & PaymentAllocation
     if (!isDraft && effectivePaid > 0) {
-      // Find or seed cash/bank account
-      const cashOrBankHead =
-        paymentMode === "CASH"
-          ? await prisma.account.findFirst({ where: { companyId, code: "1001" } })
-          : await prisma.account.findFirst({ where: { companyId, code: { in: ["1002", "1003"] } } });
+      // Find or seed cash/bank accounts
+      const cashHead = await prisma.account.findFirst({ where: { companyId, code: "1001" } });
+      const bankHead = await prisma.account.findFirst({ where: { companyId, code: { in: ["1002", "1003"] } } });
 
       const counterHead = isSales
         ? await prisma.account.findFirst({ where: { companyId, code: "1100" } })
         : await prisma.account.findFirst({ where: { companyId, code: "2001" } });
+
+      const isSplit = paymentMode === "SPLIT" && !!splitPaymentDetails;
+      const cashPart = isSplit
+        ? Math.min(effectivePaid, Math.max(0, Number(splitPaymentDetails.cashAmount) || 0))
+        : 0;
+      const onlinePart = isSplit
+        ? Math.max(0, roundTo2(effectivePaid - cashPart))
+        : 0;
 
       const pYear = date.getFullYear();
       const pCount = await tx.payment.count({ where: { companyId } });
@@ -677,6 +690,39 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
       // Payment Voucher
       const payVoucherNo = `V-${isSales ? "REC" : "PAY"}-${datePrefix}-${String(vCount + 2).padStart(4, "0")}-${randomSuffix}`;
+      
+      const voucherEntries: { accountId: string; debit: Decimal; credit: Decimal }[] = [];
+      if (isSplit && cashHead && bankHead && counterHead) {
+        if (isSales) {
+          if (cashPart > 0) voucherEntries.push({ accountId: cashHead.id, debit: new Decimal(cashPart), credit: new Decimal(0) });
+          if (onlinePart > 0) voucherEntries.push({ accountId: bankHead.id, debit: new Decimal(onlinePart), credit: new Decimal(0) });
+          voucherEntries.push({ accountId: counterHead.id, debit: new Decimal(0), credit: new Decimal(effectivePaid) });
+        } else {
+          voucherEntries.push({ accountId: counterHead.id, debit: new Decimal(effectivePaid), credit: new Decimal(0) });
+          if (cashPart > 0) voucherEntries.push({ accountId: cashHead.id, debit: new Decimal(0), credit: new Decimal(cashPart) });
+          if (onlinePart > 0) voucherEntries.push({ accountId: bankHead.id, debit: new Decimal(0), credit: new Decimal(onlinePart) });
+        }
+      } else {
+        const primaryHead = paymentMode === "CASH" ? (cashHead || bankHead) : (bankHead || cashHead);
+        if (primaryHead && counterHead) {
+          if (isSales) {
+            voucherEntries.push(
+              { accountId: primaryHead.id, debit: new Decimal(effectivePaid), credit: new Decimal(0) },
+              { accountId: counterHead.id, debit: new Decimal(0), credit: new Decimal(effectivePaid) }
+            );
+          } else {
+            voucherEntries.push(
+              { accountId: counterHead.id, debit: new Decimal(effectivePaid), credit: new Decimal(0) },
+              { accountId: primaryHead.id, debit: new Decimal(0), credit: new Decimal(effectivePaid) }
+            );
+          }
+        }
+      }
+
+      const narrationText = isSplit
+        ? `Split Payment for ${isSales ? "sales invoice" : "purchase bill"} ${invoiceNo} (Cash: ₹${cashPart}, Online: ₹${onlinePart})`
+        : `Payment for ${isSales ? "sales invoice" : "purchase bill"} ${invoiceNo} via ${paymentMode}`;
+
       const payVoucher = await tx.voucher.create({
         data: {
           companyId,
@@ -685,17 +731,9 @@ export async function createInvoice(input: CreateInvoiceInput) {
           date,
           partyId: partyId || null,
           invoiceId: invoice.id,
-          narration: `Payment for ${isSales ? "sales invoice" : "purchase bill"} ${invoiceNo} via ${paymentMode}`,
+          narration: narrationText,
           entries: {
-            create: isSales
-              ? [
-                  { accountId: cashOrBankHead!.id, debit: new Decimal(effectivePaid), credit: new Decimal(0) },
-                  { accountId: counterHead!.id, debit: new Decimal(0), credit: new Decimal(effectivePaid) },
-                ]
-              : [
-                  { accountId: counterHead!.id, debit: new Decimal(effectivePaid), credit: new Decimal(0) },
-                  { accountId: cashOrBankHead!.id, debit: new Decimal(0), credit: new Decimal(effectivePaid) },
-                ],
+            create: voucherEntries,
           },
         },
       });
@@ -711,9 +749,11 @@ export async function createInvoice(input: CreateInvoiceInput) {
           amount: new Decimal(effectivePaid),
           unallocatedAmount: new Decimal(0),
           mode: paymentMode,
-          accountId: cashOrBankHead?.id,
-          reference: paymentReference || null,
-          notes: `Upfront payment on bill ${invoiceNo}`,
+          accountId: isSplit ? (bankHead?.id || cashHead?.id) : (paymentMode === "CASH" ? cashHead?.id : bankHead?.id),
+          reference: paymentReference || (isSplit && splitPaymentDetails?.reference ? splitPaymentDetails.reference : null),
+          notes: isSplit
+            ? `Split upfront payment on bill ${invoiceNo}: Cash ₹${cashPart}, Online ₹${onlinePart}`
+            : `Upfront payment on bill ${invoiceNo}`,
           voucherId: payVoucher.id,
           status: "COMPLETED",
         },

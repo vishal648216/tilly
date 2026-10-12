@@ -73,6 +73,7 @@ export default async function PosPage() {
         city: company.city || null,
         state: company.state || null,
         gstin: company.gstin || null,
+        upiId: company.upiId || null,
       }}
       defaultWarehouseId={defaultWarehouseId}
     />
