@@ -516,13 +516,15 @@ export default function PosClient({
                       </span>
                       {item.type === "PRODUCT" && (
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                            item.stock > 0
-                              ? "bg-slate-100 text-slate-600"
-                              : "bg-rose-50 text-rose-600"
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            item.stock <= 0
+                              ? "bg-rose-100 text-rose-800 font-extrabold"
+                              : item.stock <= 5
+                              ? "bg-amber-100 text-amber-800 font-extrabold"
+                              : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          Stock: {item.stock}
+                          {item.stock <= 0 ? "Out of Stock" : `Stock: ${item.stock}`}
                         </span>
                       )}
                     </div>
