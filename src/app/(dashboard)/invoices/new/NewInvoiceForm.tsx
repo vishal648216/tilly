@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { roundTo2, formatCurrency } from "@/lib/currency";
 import {
@@ -20,6 +20,10 @@ import {
   CreditCard,
   Truck,
   Percent,
+  Zap,
+  MapPin,
+  Keyboard,
+  Search,
 } from "lucide-react";
 import { isValidIndianMobile, isValidGstin, INDIAN_STATES } from "@/lib/validators";
 
@@ -289,8 +293,17 @@ export default function NewInvoiceForm({
     stock: "",
   });
 
-  // Barcode input state
+  // Barcode input state & refs for POS speed
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
+
+  // POS Keyboard Navigation Refs
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const paidAmountRef = useRef<HTMLInputElement>(null);
+  const itemInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const qtyRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const rateRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   const selectedParty = partiesList.find((p) => p.id === partyId);
 
@@ -309,11 +322,29 @@ export default function NewInvoiceForm({
     }
   }
 
+  // 1-Click Fast Walk-in Cash Customer
+  function handleSelectWalkInCustomer() {
+    const walkInParty = partiesList.find((p) => /cash|walk[- ]?in|counter/i.test(p.name));
+    if (walkInParty) {
+      handlePartyChange(walkInParty.id);
+      setPartySuccessMsg(`✓ Selected party "${walkInParty.name}"`);
+    } else {
+      setPartyId("");
+      setBillingAddress("Cash Sale / Counter Customer");
+      setShippingAddress("");
+      setPartySuccessMsg("✓ Set to Counter / Walk-in Customer");
+    }
+    setTimeout(() => setPartySuccessMsg(""), 3000);
+  }
+
   // Inter-state GST calculation check
   const isInterState = useMemo(() => {
-    if (!companyState || !selectedParty?.state) return false;
-    return companyState.toLowerCase() !== selectedParty.state.toLowerCase();
-  }, [companyState, selectedParty]);
+    if (!companyState || !placeOfSupply) {
+      if (!companyState || !selectedParty?.state) return false;
+      return companyState.toLowerCase() !== selectedParty.state.toLowerCase();
+    }
+    return companyState.toLowerCase() !== placeOfSupply.toLowerCase();
+  }, [companyState, selectedParty, placeOfSupply]);
 
   // Live Totals calculation
   const totals = useMemo(() => {
@@ -372,6 +403,15 @@ export default function NewInvoiceForm({
     setLines((ls) => [...ls, { ...emptyLine, key: Date.now() + Math.random() }]);
   }
 
+  function addLineAndFocus() {
+    const newKey = Date.now() + Math.random();
+    setLines((ls) => [...ls, { ...emptyLine, key: newKey }]);
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(newKey);
+      el?.focus();
+    }, 60);
+  }
+
   function removeLine(key: number) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : ls));
   }
@@ -409,6 +449,15 @@ export default function NewInvoiceForm({
             : l
         )
       );
+
+      // Auto-jump focus to Qty field for POS speed
+      setTimeout(() => {
+        const qtyEl = qtyRefs.current.get(key);
+        if (qtyEl) {
+          qtyEl.focus();
+          qtyEl.select();
+        }
+      }, 50);
     } else {
       setLines((ls) =>
         ls.map((l) =>
@@ -420,6 +469,20 @@ export default function NewInvoiceForm({
             : l
         )
       );
+    }
+  }
+
+  function handleItemInputChange(key: number, value: string) {
+    updateLine(key, "name", value);
+    // Instant match by name, SKU or barcode
+    const matched = itemsList.find(
+      (i) =>
+        i.name.toLowerCase() === value.trim().toLowerCase() ||
+        (i.sku && i.sku.toLowerCase() === value.trim().toLowerCase()) ||
+        (i.barcode && i.barcode.toLowerCase() === value.trim().toLowerCase())
+    );
+    if (matched) {
+      selectItem(key, matched.id);
     }
   }
 
@@ -439,31 +502,41 @@ export default function NewInvoiceForm({
       if (matched) {
         const existingLine = lines.find((l) => l.itemId === matched.id);
         if (existingLine) {
-          updateLine(existingLine.key, "qty", existingLine.qty + 1);
-          setPartySuccessMsg(`Scanned: ${matched.name} (+1 Qty)`);
+          updateLine(existingLine.key, "qty", Number(existingLine.qty || 0) + 1);
+          setPartySuccessMsg(`✓ Scanned: ${matched.name} (+1 Qty)`);
         } else {
-          setLines((ls) => [
-            ...ls,
-            {
-              key: Date.now() + Math.random(),
-              itemId: matched.id,
-              name: matched.name,
-              sku: matched.sku || "",
-              barcode: matched.barcode || "",
-              unit: matched.unit || "PCS",
-              hsn: matched.hsn || "",
-              qty: 1,
-              discount: 0,
-              rate: isPurchase
-                ? parseFloat(matched.purchasePrice || 0)
-                : parseFloat(matched.salePrice || 0),
-              gstRate: parseFloat(matched.gstRate || 0),
-            },
-          ]);
-          setPartySuccessMsg(`Scanned & Added: ${matched.name}`);
+          // If first row is untouched/empty, populate it directly
+          const emptyLineObj = lines.find((l) => !l.itemId && !l.name.trim());
+          const targetKey = emptyLineObj ? emptyLineObj.key : Date.now() + Math.random();
+
+          const newLineData: Line = {
+            key: targetKey,
+            itemId: matched.id,
+            name: matched.name,
+            sku: matched.sku || "",
+            barcode: matched.barcode || "",
+            unit: matched.unit || "PCS",
+            hsn: matched.hsn || "",
+            qty: 1,
+            discount: 0,
+            rate: isPurchase
+              ? parseFloat(matched.purchasePrice || 0)
+              : parseFloat(matched.salePrice || 0),
+            purchasePrice: parseFloat(matched.purchasePrice || 0),
+            salePrice: parseFloat(matched.salePrice || 0),
+            gstRate: parseFloat(matched.gstRate || 18),
+          };
+
+          if (emptyLineObj) {
+            setLines((ls) => ls.map((l) => (l.key === targetKey ? newLineData : l)));
+          } else {
+            setLines((ls) => [...ls, newLineData]);
+          }
+          setPartySuccessMsg(`✓ Scanned & Added: ${matched.name}`);
         }
         setBarcodeInput("");
         setTimeout(() => setPartySuccessMsg(""), 3000);
+        barcodeInputRef.current?.focus();
       } else {
         setPartySuccessMsg(`Product with barcode/SKU "${code}" not found.`);
         setTimeout(() => setPartySuccessMsg(""), 4000);
@@ -744,6 +817,42 @@ export default function NewInvoiceForm({
     }
   }
 
+  // POS Keyboard Hotkeys: F2 (Date), F4 (Barcode), F8 (Payment), Ctrl+Enter (Save & Post), Ctrl+P (Save & Print), Alt+A (Add Line)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ignore if user is inside quick modals
+      if (showAddPartyModal || showAddItemModal) return;
+
+      if (e.key === "F2") {
+        e.preventDefault();
+        dateInputRef.current?.focus();
+        try {
+          (dateInputRef.current as any)?.showPicker?.();
+        } catch {}
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        barcodeInputRef.current?.select();
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        paidAmountRef.current?.focus();
+        paidAmountRef.current?.select();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        executeSubmit("SAVE_POST");
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        executeSubmit("SAVE_PRINT");
+      } else if (e.altKey && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        addLineAndFocus();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showAddPartyModal, showAddItemModal, lines, partyId, totals, existingOrderNosList, orderNo]);
+
   return (
     <div className="space-y-6">
       {initialData?.sourceDocLabel && (
@@ -781,8 +890,36 @@ export default function NewInvoiceForm({
         </div>
       )}
 
+      {/* POS Speed Hotkeys Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl shadow-xs text-xs">
+        <div className="flex items-center gap-2 font-medium">
+          <Keyboard className="h-4 w-4 text-emerald-400" />
+          <span className="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">POS Speed Keys:</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+            <strong className="text-emerald-400">F2</strong> Date
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+            <strong className="text-emerald-400">F4</strong> Barcode
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+            <strong className="text-emerald-400">F8</strong> Payment
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+            <strong className="text-emerald-400">Alt+A</strong> Add Item
+          </span>
+          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-200 border border-emerald-800 font-mono">
+            <strong className="text-emerald-300">Ctrl+Enter</strong> Save & Post
+          </span>
+          <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-200 border border-blue-800 font-mono">
+            <strong className="text-blue-300">Ctrl+P</strong> Save & Print
+          </span>
+        </div>
+      </div>
+
       {/* Primary Transaction Header */}
-      <div className="card p-6 space-y-4">
+      <div className="card p-5 space-y-4">
         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span>{isPurchase ? "Vendor & Purchase Details" : "Customer & Sales Details"}</span>
@@ -791,36 +928,55 @@ export default function NewInvoiceForm({
               {invoiceNoPreview}
             </span>
           </div>
-          <span className="text-xs font-normal normal-case text-slate-400">
-            GST Rule: {isInterState ? "Inter-state (IGST)" : "Intra-state (CGST + SGST)"}
-          </span>
+          <div className="flex items-center gap-2 text-xs font-normal normal-case text-slate-500">
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">
+              State: {placeOfSupply || companyState || "Default"}
+            </span>
+            <span className="font-semibold text-slate-700">
+              {isInterState ? "Inter-state (IGST)" : "Intra-state (CGST + SGST)"}
+            </span>
+          </div>
         </h2>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Row 1: Party, Date, Payment Terms, Warehouse */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Party Selector */}
-          <div className="lg:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-2">
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 {isPurchase ? "Vendor / Supplier *" : "Customer / Party"}
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalError("");
-                  setShowAddPartyModal(true);
-                }}
-                className="inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                <span>+ New {isPurchase ? "Vendor" : "Customer"}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {!isPurchase && (
+                  <button
+                    type="button"
+                    onClick={handleSelectWalkInCustomer}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded transition-colors"
+                    title="1-Click fast counter sale without registering customer"
+                  >
+                    <Zap className="h-3 w-3" />
+                    <span>⚡ Walk-in Cash</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalError("");
+                    setShowAddPartyModal(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span>+ New {isPurchase ? "Vendor" : "Customer"}</span>
+                </button>
+              </div>
             </div>
             <select
-              className="input w-full"
+              className="input w-full text-xs font-medium"
               value={partyId}
               onChange={(e) => handlePartyChange(e.target.value)}
             >
-              <option value="">— Select {isPurchase ? "Vendor" : "Customer"} —</option>
+              <option value="">— Select {isPurchase ? "Vendor" : "Customer (or Walk-in)"} —</option>
               {partiesList.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} {p.gstin ? `(${p.gstin.slice(0, 7)}...)` : ""}
@@ -831,43 +987,57 @@ export default function NewInvoiceForm({
 
           {/* Date */}
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              {isPurchase ? "Purchase Date *" : "Invoice Date *"}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {isPurchase ? "Purchase Date *" : "Invoice Date *"}
+              </label>
+              <span className="text-[10px] text-slate-400 font-mono">[F2]</span>
+            </div>
             <input
+              ref={dateInputRef}
               type="date"
-              className="input mt-1 w-full"
+              className="input w-full text-xs"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               required
             />
           </div>
+
+          {/* Payment Terms */}
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+              Payment Terms
+            </label>
+            <select
+              className="input w-full text-xs font-medium"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+            >
+              <option value="Immediate">Immediate / Due on Receipt</option>
+              <option value="Net 7">Net 7 Days</option>
+              <option value="Net 15">Net 15 Days</option>
+              <option value="Net 30">Net 30 Days</option>
+              <option value="Net 60">Net 60 Days</option>
+            </select>
+          </div>
         </div>
 
-        {/* Extended Fields: Reference, Supplier Bill */}
-        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isPurchase ? "lg:grid-cols-3" : "lg:grid-cols-2"} pt-2`}>
+        {/* Row 2: Salesperson/Supplier Ref, Order/PO Ref, Place of Supply, Warehouse */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+          {/* Salesperson or Supplier Bill */}
           {isPurchase ? (
-            <>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Supplier Bill / Invoice #</label>
-                <input
-                  type="text"
-                  placeholder="e.g. INV-9842"
-                  className="input mt-1 w-full font-mono uppercase"
-                  value={supplierInvoiceNo}
-                  onChange={(e) => setSupplierInvoiceNo(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Supplier Invoice Date</label>
-                <input
-                  type="date"
-                  className="input mt-1 w-full"
-                  value={supplierInvoiceDate}
-                  onChange={(e) => setSupplierInvoiceDate(e.target.value)}
-                />
-              </div>
-            </>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                Supplier Bill / Inv #
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. INV-9842"
+                className="input w-full font-mono uppercase text-xs"
+                value={supplierInvoiceNo}
+                onChange={(e) => setSupplierInvoiceNo(e.target.value)}
+              />
+            </div>
           ) : (
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -901,14 +1071,14 @@ export default function NewInvoiceForm({
                 <input
                   type="text"
                   autoFocus
-                  placeholder="Enter salesperson name..."
-                  className="input w-full text-sm"
+                  placeholder="Salesperson name..."
+                  className="input w-full text-xs"
                   value={salesperson}
                   onChange={(e) => setSalesperson(e.target.value)}
                 />
               ) : (
                 <select
-                  className="input w-full text-sm"
+                  className="input w-full text-xs"
                   value={salesperson}
                   onChange={(e) => {
                     if (e.target.value === "__CUSTOM__") {
@@ -925,78 +1095,140 @@ export default function NewInvoiceForm({
                       {name}
                     </option>
                   ))}
-                  <option value="__CUSTOM__">➕ + Enter Custom Salesperson...</option>
+                  <option value="__CUSTOM__">➕ + Enter Custom...</option>
                 </select>
               )}
             </div>
           )}
 
+          {/* Customer PO / Order Ref */}
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-semibold text-slate-700">
-                {isPurchase ? "Purchase Order / PO #" : "Customer PO / Order Ref"}
+                {isPurchase ? "PO Reference #" : "Customer PO / Order Ref"}
               </label>
               <button
                 type="button"
                 onClick={handleRegeneratePoNumber}
                 className="text-[11px] text-brand-600 hover:text-brand-700 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
-                title="Regenerate next unique PO number"
+                title="Regenerate unique PO number"
               >
-                <span>⚡ Auto-Generate</span>
+                <span>⚡ Auto</span>
               </button>
             </div>
             <input
               type="text"
               placeholder={`e.g. PO-${currentYear}-001`}
-              className={`input mt-1 w-full font-mono uppercase text-xs ${
+              className={`input w-full font-mono uppercase text-xs ${
                 orderNoError
-                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50/20 text-red-900"
-                  : "border-slate-200 focus:border-emerald-500 text-slate-900"
+                  ? "border-red-500 focus:border-red-500 bg-red-50/20 text-red-900"
+                  : "border-slate-200 text-slate-900"
               }`}
               value={orderNo}
               onChange={(e) => handleOrderNoChange(e.target.value)}
             />
-            {orderNoError ? (
-              <p className="mt-1 text-[11px] font-semibold text-red-600 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3 shrink-0" />
-                <span>{orderNoError}</span>
-              </p>
-            ) : (
-              <p className="mt-1 text-[11px] text-slate-400">
-                Format: <span className="font-mono font-medium text-slate-600">PO-{currentYear}-XXX</span> (Unique for {currentYear})
+            {orderNoError && (
+              <p className="mt-1 text-[10px] font-semibold text-red-600 truncate">
+                {orderNoError}
               </p>
             )}
           </div>
+
+          {/* Place of Supply */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1 block">
+              Place of Supply (State)
+            </label>
+            <select
+              className="input w-full text-xs"
+              value={placeOfSupply}
+              onChange={(e) => setPlaceOfSupply(e.target.value)}
+            >
+              <option value="">— Default ({companyState || "Company State"}) —</option>
+              {INDIAN_STATES.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Warehouse Selector */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1 block">
+              Stock Warehouse
+            </label>
+            <select
+              className="input w-full text-xs"
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+            >
+              {warehouses.length > 0 ? (
+                warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} {w.code ? `(${w.code})` : ""}
+                  </option>
+                ))
+              ) : (
+                <option value="">Main Warehouse</option>
+              )}
+            </select>
+          </div>
         </div>
 
-        {/* Addresses for Sales */}
+        {/* Compact Address Drawer for Sales (Zero Screen Hogging!) */}
         {!isPurchase && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
-            <div>
-              <label className="text-xs font-semibold text-slate-700">Billing Address</label>
-              <textarea
-                rows={2}
-                className="input mt-1 w-full text-xs"
-                placeholder="Customer registered billing address..."
-                value={billingAddress}
-                onChange={(e) => setBillingAddress(e.target.value)}
-              />
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-slate-600 truncate mr-2">
+                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="font-semibold text-slate-700 shrink-0">Address:</span>
+                <span className="text-slate-500 truncate">
+                  {billingAddress
+                    ? billingAddress
+                    : selectedParty
+                    ? `Default (${selectedParty.name})`
+                    : "Walk-in Counter"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddressDetails(!showAddressDetails)}
+                className="text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline shrink-0"
+              >
+                {showAddressDetails ? "▲ Collapse Addresses" : "✏️ Edit / View Addresses"}
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-700">Shipping Address</label>
-              <textarea
-                rows={2}
-                className="input mt-1 w-full text-xs"
-                placeholder="Consignee delivery / shipping address..."
-                value={shippingAddress}
-                onChange={(e) => setShippingAddress(e.target.value)}
-              />
-            </div>
+
+            {showAddressDetails && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-3 mt-2 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Billing Address</label>
+                  <textarea
+                    rows={2}
+                    className="input mt-1 w-full text-xs"
+                    placeholder="Customer registered billing address..."
+                    value={billingAddress}
+                    onChange={(e) => setBillingAddress(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Shipping Address</label>
+                  <textarea
+                    rows={2}
+                    className="input mt-1 w-full text-xs"
+                    placeholder="Consignee delivery / shipping address..."
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Transport & Logistics / E-Way Bill (Optional) */}
-        <div className="border-t border-slate-100 pt-3">
+        <div className="border-t border-slate-100 pt-2">
           <div className="flex items-center justify-between">
             <button
               type="button"
@@ -1021,7 +1253,7 @@ export default function NewInvoiceForm({
           </div>
 
           {showTransportDetails && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 p-3.5 bg-slate-50/70 border border-slate-200/80 rounded-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl">
               <div>
                 <label className="text-xs font-semibold text-slate-700">E-Way Bill Number</label>
                 <input
@@ -1073,19 +1305,20 @@ export default function NewInvoiceForm({
 
       {/* Barcode Quick Scanner Banner */}
       <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 shrink-0 border border-emerald-200">
           <Barcode className="h-5 w-5" />
         </div>
         <div className="flex-1">
           <input
+            ref={barcodeInputRef}
             className="w-full bg-transparent text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none"
-            placeholder="Barcode Scanner Ready: Scan physical barcode or type SKU / Name and press Enter..."
+            placeholder="[F4] Barcode Scanner Ready: Scan barcode or type SKU / Name and press Enter..."
             value={barcodeInput}
             onChange={(e) => setBarcodeInput(e.target.value)}
             onKeyDown={handleBarcodeKeyDown}
           />
         </div>
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-1 rounded">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded">
           Auto-Adds Line
         </span>
       </div>
@@ -1149,18 +1382,50 @@ export default function NewInvoiceForm({
                     {/* Item selector & name */}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            ref={(el) => {
+                              if (el) itemInputRefs.current.set(line.key, el);
+                              else itemInputRefs.current.delete(line.key);
+                            }}
+                            list={`items-datalist-${line.key}`}
+                            type="text"
+                            placeholder="Type product name, SKU or barcode..."
+                            className="input w-full text-xs px-2.5 py-1.5 font-medium"
+                            value={line.name}
+                            onChange={(e) => handleItemInputChange(line.key, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                qtyRefs.current.get(line.key)?.focus();
+                                qtyRefs.current.get(line.key)?.select();
+                              }
+                            }}
+                            required
+                          />
+                          <datalist id={`items-datalist-${line.key}`}>
+                            {itemsList.map((i) => (
+                              <option key={i.id} value={i.name}>
+                                {i.name} {i.sku ? `[${i.sku}]` : ""} • Stock: {Number(i.stock || 0)} {i.unit || "PCS"} • ₹{isPurchase ? (i.purchasePrice || 0) : (i.salePrice || 0)}
+                              </option>
+                            ))}
+                          </datalist>
+                        </div>
+
                         <select
-                          className="input flex-1 min-w-[140px] text-xs px-2.5 py-1.5"
+                          className="input w-28 text-xs px-2 py-1.5 text-slate-500"
                           value={line.itemId}
                           onChange={(e) => selectItem(line.key, e.target.value)}
+                          title="Or pick from dropdown"
                         >
-                          <option value="">Custom Item</option>
+                          <option value="">Catalog...</option>
                           {itemsList.map((i) => (
                             <option key={i.id} value={i.id}>
-                              {i.name} {i.sku ? `[${i.sku}]` : ""} • Stock: {Number(i.stock || 0)} {i.unit || "PCS"}
+                              {i.name}
                             </option>
                           ))}
                         </select>
+
                         <button
                           type="button"
                           onClick={() => {
@@ -1168,19 +1433,12 @@ export default function NewInvoiceForm({
                             setShowAddItemModal(true);
                           }}
                           title="Quick Add Product to Inventory"
-                          className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                          className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Item description / name"
-                        className="input mt-1 w-full text-xs px-2.5 py-1.5"
-                        value={line.name}
-                        onChange={(e) => updateLine(line.key, "name", e.target.value)}
-                        required
-                      />
+
                       {availableStock !== null && !isPurchase && it?.type !== "SERVICE" && (
                         <div className="flex items-center gap-1.5 pt-1">
                           {isOverStock ? (
@@ -1211,6 +1469,10 @@ export default function NewInvoiceForm({
                     {/* Qty */}
                     <td className="px-3 py-2">
                       <input
+                        ref={(el) => {
+                          if (el) qtyRefs.current.set(line.key, el);
+                          else qtyRefs.current.delete(line.key);
+                        }}
                         type="number"
                         min="0.01"
                         step="any"
@@ -1222,6 +1484,13 @@ export default function NewInvoiceForm({
                         }`}
                         value={line.qty || ""}
                         onChange={(e) => updateLine(line.key, "qty", parseFloat(e.target.value) || 0)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            rateRefs.current.get(line.key)?.focus();
+                            rateRefs.current.get(line.key)?.select();
+                          }
+                        }}
                         required
                       />
                       {isOverStock && availableStock !== null && (
@@ -1250,16 +1519,32 @@ export default function NewInvoiceForm({
                     {/* Rate / Purchase Price */}
                     <td className="px-3 py-2">
                       <input
+                        ref={(el) => {
+                          if (el) rateRefs.current.set(line.key, el);
+                          else rateRefs.current.delete(line.key);
+                        }}
                         type="number"
                         min="0"
                         step="0.01"
                         placeholder="0.00"
-                        className="input w-full text-right text-xs font-mono px-2.5 py-1.5"
+                        className="input w-full text-right text-xs font-mono px-2.5 py-1.5 font-medium"
                         value={line.rate || ""}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
                           updateLine(line.key, "rate", val);
                           updateLine(line.key, "purchasePrice", val);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const currentIndex = lines.findIndex((l) => l.key === line.key);
+                            if (currentIndex < lines.length - 1) {
+                              const nextLine = lines[currentIndex + 1];
+                              itemInputRefs.current.get(nextLine.key)?.focus();
+                            } else {
+                              addLineAndFocus();
+                            }
+                          }
                         }}
                         required
                       />
@@ -1352,60 +1637,99 @@ export default function NewInvoiceForm({
           </table>
         </div>
 
-        <div className="p-3 border-t border-slate-100 bg-slate-50/50">
+        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <button
             type="button"
-            onClick={addLine}
+            onClick={addLineAndFocus}
             className="btn-secondary text-xs inline-flex items-center gap-1.5"
           >
-            <Plus className="h-3.5 w-3.5" /> Add Another Line
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Another Line</span>
+            <span className="text-[10px] text-slate-400 font-mono">[Alt+A]</span>
           </button>
+          <span className="text-[11px] text-slate-500">
+            Tip: Press <strong className="font-mono text-slate-700">Enter</strong> on Rate to add the next item instantly
+          </span>
         </div>
       </div>
 
       {/* Totals, Freight, Payment & Notes */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Notes & Payment Terms */}
+        {/* Notes & Quick Settlement Payment */}
         <div className="card p-5 space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Payment Terms & Instructions
-            </label>
-            <select
-              className="input mt-1 w-full text-xs"
-              value={paymentTerms}
-              onChange={(e) => setPaymentTerms(e.target.value)}
-            >
-              <option value="Immediate">Immediate / Due on Receipt</option>
-              <option value="Net 7">Net 7 Days</option>
-              <option value="Net 15">Net 15 Days</option>
-              <option value="Net 30">Net 30 Days</option>
-              <option value="Net 60">Net 60 Days</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Notes & Remarks
+              Notes & Dispatch Instructions
             </label>
             <textarea
-              className="input mt-1 w-full min-h-[90px] text-xs"
+              className="input mt-1 w-full min-h-[80px] text-xs"
               placeholder="Terms, bank account details, or dispatch instructions..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
-          {/* Upfront Payment Section */}
+          {/* Upfront Payment Section with 1-Click Speed POS Buttons */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <CreditCard className="h-4 w-4 text-brand-600" />
-              <span>Record Instant Payment (Optional)</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <CreditCard className="h-4 w-4 text-emerald-600" />
+                <span>Instant Payment (POS Counter)</span>
+              </h4>
+              <span className="text-[10px] text-slate-400 font-mono">[F8]</span>
+            </div>
+
+            {/* 1-Click Speed Payment Buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaidAmount(totals.grand);
+                  setPaymentMode("CASH");
+                  setPartySuccessMsg(`✓ Set full cash payment: ₹${totals.grand.toFixed(2)}`);
+                  setTimeout(() => setPartySuccessMsg(""), 2500);
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                title="1-Click: Paid full bill in Cash"
+              >
+                <Zap className="h-3 w-3" />
+                <span>Full Cash (₹{totals.grand.toFixed(2)})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPaidAmount(totals.grand);
+                  setPaymentMode("UPI");
+                  setPartySuccessMsg(`✓ Set full UPI payment: ₹${totals.grand.toFixed(2)}`);
+                  setTimeout(() => setPartySuccessMsg(""), 2500);
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                title="1-Click: Paid full bill via UPI"
+              >
+                <Zap className="h-3 w-3" />
+                <span>Full UPI (₹{totals.grand.toFixed(2)})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPaidAmount(0);
+                  setPartySuccessMsg("✓ Set as Credit (Udhar) - ₹0 upfront");
+                  setTimeout(() => setPartySuccessMsg(""), 2500);
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                title="1-Click: Full credit bill"
+              >
+                <span>Credit / Udhar (₹0)</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
               <div>
-                <label className="text-[11px] text-slate-500">Amount Paid (₹)</label>
+                <label className="text-[11px] text-slate-500 font-medium">Amount Paid (₹)</label>
                 <input
+                  ref={paidAmountRef}
                   type="number"
                   min="0"
                   step="any"
@@ -1416,21 +1740,21 @@ export default function NewInvoiceForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-500">Payment Mode</label>
+                <label className="text-[11px] text-slate-500 font-medium">Payment Mode</label>
                 <select
-                  className="input mt-0.5 w-full text-xs"
+                  className="input mt-0.5 w-full text-xs font-medium"
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value as any)}
                 >
                   <option value="CASH">Cash</option>
-                  <option value="BANK">Bank Transfer (NEFT/RTGS)</option>
                   <option value="UPI">UPI</option>
+                  <option value="BANK">Bank Transfer (NEFT/RTGS)</option>
                   <option value="CARD">Debit / Credit Card</option>
                   <option value="CHEQUE">Cheque</option>
                 </select>
               </div>
               <div>
-                <label className="text-[11px] text-slate-500">Ref / Cheque #</label>
+                <label className="text-[11px] text-slate-500 font-medium">Ref / Cheque #</label>
                 <input
                   type="text"
                   placeholder="Txn ref..."
@@ -1571,6 +1895,9 @@ export default function NewInvoiceForm({
         >
           <CheckCircle className="h-4 w-4" />
           <span>{loading ? "Posting..." : "Save & Post"}</span>
+          <span className="text-[10px] bg-emerald-700 text-emerald-100 px-1.5 py-0.5 rounded font-mono">
+            Ctrl+Enter
+          </span>
         </button>
 
         <button
@@ -1581,6 +1908,9 @@ export default function NewInvoiceForm({
         >
           <Printer className="h-4 w-4" />
           <span>Save & Print</span>
+          <span className="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-mono">
+            Ctrl+P
+          </span>
         </button>
 
         <button
