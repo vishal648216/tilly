@@ -71,6 +71,7 @@ export default function PartiesClient({
   // Payment Settle Modal State
   const [activeParty, setActiveParty] = useState<PartyItem | null>(null);
   const [amount, setAmount] = useState<string>("");
+  const [discountAllowed, setDiscountAllowed] = useState<string>("");
   const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI" | "BANK" | "CHEQUE">("CASH");
   const [reference, setReference] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -86,6 +87,7 @@ export default function PartiesClient({
     partyName: string;
     partyPhone?: string | null;
     amount: number;
+    discount?: number;
     mode: string;
     date: string;
     newBalance: number;
@@ -154,6 +156,7 @@ export default function PartiesClient({
         : Math.abs(party.netBalance);
 
     setAmount(defaultDue > 0 ? defaultDue.toString() : "");
+    setDiscountAllowed("");
     setPaymentMode("CASH");
     setReference("");
     setChequeNo("");
@@ -162,13 +165,15 @@ export default function PartiesClient({
     setModalError("");
   };
 
-  // Live Auto-allocation calculation (FIFO)
+  // Live Auto-allocation calculation (FIFO) including settlement discount
   const allocationPreview = useMemo(() => {
     if (!activeParty) return { allocations: [], unallocated: 0 };
     const amt = parseFloat(amount) || 0;
-    if (amt <= 0) return { allocations: [], unallocated: 0 };
+    const disc = parseFloat(discountAllowed) || 0;
+    const effectiveAmt = Math.round((amt + disc) * 100) / 100;
+    if (effectiveAmt <= 0) return { allocations: [], unallocated: 0 };
 
-    let remaining = amt;
+    let remaining = effectiveAmt;
     const allocs: Array<{ invoice: PartyInvoice; amount: number }> = [];
 
     // Filter matching unpaid invoices
@@ -191,7 +196,7 @@ export default function PartiesClient({
       allocations: allocs,
       unallocated: Math.max(0, Math.round(remaining * 100) / 100),
     };
-  }, [activeParty, amount]);
+  }, [activeParty, amount, discountAllowed]);
 
   // Submit Payment
   const handleSubmitPayment = async (e: React.FormEvent) => {
@@ -199,6 +204,7 @@ export default function PartiesClient({
     if (!activeParty) return;
 
     const numAmount = parseFloat(amount);
+    const numDiscount = parseFloat(discountAllowed) || 0;
     if (isNaN(numAmount) || numAmount <= 0) {
       setModalError("Please enter a valid amount greater than 0.");
       return;
@@ -214,6 +220,8 @@ export default function PartiesClient({
       const payload = {
         partyId: activeParty.id,
         amount: numAmount,
+        discountAllowed: isCustomer && numDiscount > 0 ? numDiscount : undefined,
+        discountReceived: !isCustomer && numDiscount > 0 ? numDiscount : undefined,
         date: paymentDate,
         mode: paymentMode,
         type: targetType,
@@ -239,11 +247,12 @@ export default function PartiesClient({
         throw new Error(data.error || "Failed to record payment");
       }
 
-      // Update state locally
+      // Update state locally (accounting for payment amount + settlement discount)
+      const totalReduction = numAmount + numDiscount;
       const oldReceivable = activeParty.receivable;
       const oldPayable = activeParty.payable;
-      const newReceivable = isCustomer ? Math.max(0, oldReceivable - numAmount) : oldReceivable;
-      const newPayable = !isCustomer ? Math.max(0, oldPayable - numAmount) : oldPayable;
+      const newReceivable = isCustomer ? Math.max(0, oldReceivable - totalReduction) : oldReceivable;
+      const newPayable = !isCustomer ? Math.max(0, oldPayable - totalReduction) : oldPayable;
       const newNet = isCustomer ? newReceivable : -newPayable;
 
       setParties((prev) =>
@@ -278,6 +287,7 @@ export default function PartiesClient({
         partyName: activeParty.name,
         partyPhone: activeParty.phone,
         amount: numAmount,
+        discount: numDiscount > 0 ? numDiscount : undefined,
         mode: paymentMode,
         date: new Date(paymentDate).toLocaleDateString("en-IN", {
           day: "2-digit",
@@ -647,48 +657,70 @@ export default function PartiesClient({
             )}
 
             <form onSubmit={handleSubmitPayment} className="space-y-4 text-xs">
-              {/* Amount & Presets */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Payment Amount (₹) <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="1"
-                    required
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-brand-500"
-                  />
+              {/* Amount & Kasar Discount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Payment Amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="1"
+                      required
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-brand-500"
+                    />
+                  </div>
                 </div>
 
-                {/* Preset Button: Full Due */}
-                <div className="flex gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAmount(
-                        (activeParty.type === "CUSTOMER"
-                          ? activeParty.receivable
-                          : activeParty.payable
-                        ).toString()
-                      )
-                    }
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
-                  >
-                    Exact Balance (
-                    {formatCurrency(
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Kasar / Discount (₹)</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">Allowed</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={discountAllowed}
+                      onChange={(e) => setDiscountAllowed(e.target.value)}
+                      placeholder="0.00 (e.g. 50)"
+                      className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-emerald-700 outline-none focus:border-emerald-500 bg-emerald-50/20"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Button: Full Due */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const exact = (
                       activeParty.type === "CUSTOMER"
                         ? activeParty.receivable
                         : activeParty.payable
-                    )}
-                    )
-                  </button>
-                </div>
+                    ).toString();
+                    setAmount(exact);
+                    setDiscountAllowed("");
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                >
+                  Exact Balance (
+                  {formatCurrency(
+                    activeParty.type === "CUSTOMER"
+                      ? activeParty.receivable
+                      : activeParty.payable
+                  )}
+                  )
+                </button>
               </div>
 
               {/* FIFO Allocation Preview */}
@@ -869,6 +901,12 @@ export default function PartiesClient({
                   {formatCurrency(successReceipt.amount)}
                 </span>
               </div>
+              {successReceipt.discount && successReceipt.discount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-semibold">
+                  <span>Kasar / Discount:</span>
+                  <span>{formatCurrency(successReceipt.discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Payment Mode:</span>
                 <span className="font-medium text-slate-900">{successReceipt.mode}</span>

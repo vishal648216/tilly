@@ -70,6 +70,9 @@ export async function POST(req: Request) {
       partyId,
       invoiceId,
       amount,
+      discountAllowed,
+      discountReceived,
+      discount,
       date,
       mode,
       reference,
@@ -144,11 +147,16 @@ export async function POST(req: Request) {
     }
 
     // 2. Call authoritative Payment & Allocation Engine
+    const finalDiscountAllowed = discountAllowed !== undefined ? parseFloat(discountAllowed) : discount !== undefined && targetType === "RECEIPT" ? parseFloat(discount) : 0;
+    const finalDiscountReceived = discountReceived !== undefined ? parseFloat(discountReceived) : discount !== undefined && targetType === "PAYMENT" ? parseFloat(discount) : 0;
+
     const result = await recordPayment({
       companyId,
       partyId: targetPartyId || undefined,
       type: targetType,
       amount: numAmount,
+      discountAllowed: !isNaN(finalDiscountAllowed) && finalDiscountAllowed > 0 ? finalDiscountAllowed : undefined,
+      discountReceived: !isNaN(finalDiscountReceived) && finalDiscountReceived > 0 ? finalDiscountReceived : undefined,
       date: paymentDate,
       mode: (mode.toUpperCase() as any) || "CASH",
       accountId: accountId || undefined,

@@ -110,6 +110,7 @@ export default function PartyProfileClient({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [discountAllowed, setDiscountAllowed] = useState("");
   const [paymentMode, setPaymentMode] = useState<"CASH" | "UPI" | "BANK" | "CHEQUE">("CASH");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const [reference, setReference] = useState("");
@@ -143,21 +144,23 @@ export default function PartyProfileClient({
   // FIFO auto-allocation calculation
   const allocationPreview = useMemo(() => {
     const amt = parseFloat(paymentAmount) || 0;
-    if (amt <= 0) return { allocations: [], unallocated: 0 };
+    const disc = parseFloat(discountAllowed) || 0;
+    const effectiveAmt = Math.round((amt + disc) * 100) / 100;
+    if (effectiveAmt <= 0) return { allocations: [], unallocated: 0 };
 
     if (selectedInvoice) {
       const grand = parseFloat(selectedInvoice.grandTotal.toString());
       const paid = parseFloat(selectedInvoice.paidAmount.toString());
       const remainingDue = Math.max(0, grand - paid);
-      const allocAmt = Math.min(amt, remainingDue);
+      const allocAmt = Math.min(effectiveAmt, remainingDue);
       return {
         allocations: [{ invoiceId: selectedInvoice.id, invoiceNo: selectedInvoice.invoiceNo, amount: allocAmt }],
-        unallocated: Math.max(0, amt - allocAmt),
+        unallocated: Math.max(0, effectiveAmt - allocAmt),
       };
     }
 
     // Auto-allocate across unpaid invoices from oldest to newest
-    let remaining = amt;
+    let remaining = effectiveAmt;
     const allocs: Array<{ invoiceId: string; invoiceNo: string; amount: number }> = [];
 
     // Sort unpaid invoices by date asc
@@ -189,6 +192,7 @@ export default function PartyProfileClient({
   const openOverallSettleModal = () => {
     setSelectedInvoice(null);
     setPaymentAmount(balance > 0 ? balance.toString() : "");
+    setDiscountAllowed("");
     setPaymentMode("CASH");
     setReference("");
     setChequeNo("");
@@ -205,6 +209,7 @@ export default function PartyProfileClient({
     const paid = parseFloat(inv.paidAmount.toString());
     const remaining = Math.max(0, grand - paid);
     setPaymentAmount(remaining.toString());
+    setDiscountAllowed("");
     setPaymentMode("CASH");
     setReference("");
     setChequeNo("");
@@ -217,6 +222,7 @@ export default function PartyProfileClient({
   async function handleRecordPayment(e: React.FormEvent) {
     e.preventDefault();
     const amt = parseFloat(paymentAmount);
+    const disc = parseFloat(discountAllowed) || 0;
 
     if (isNaN(amt) || amt <= 0) {
       setMsg("Please enter a valid payment amount greater than 0.");
@@ -233,6 +239,8 @@ export default function PartyProfileClient({
       const payload = {
         partyId: party.id,
         amount: amt,
+        discountAllowed: isCustomer && disc > 0 ? disc : undefined,
+        discountReceived: !isCustomer && disc > 0 ? disc : undefined,
         date: paymentDate,
         mode: paymentMode,
         type: targetType,
@@ -258,9 +266,10 @@ export default function PartyProfileClient({
         throw new Error(data.error || "Payment recording failed");
       }
 
-      // Update state locally
+      // Update state locally (factoring settlement discount)
+      const totalReduction = amt + disc;
       setTotalPaid((prev) => prev + amt);
-      setBalance((prev) => Math.max(0, prev - amt));
+      setBalance((prev) => Math.max(0, prev - totalReduction));
 
       // Update invoices
       setInvoices((prev) =>
@@ -452,6 +461,20 @@ export default function PartyProfileClient({
                 {party.gstTreatment && <span className="text-slate-400">({party.gstTreatment})</span>}
               </p>
             </div>
+            {party.pan && (
+              <div>
+                <p className="text-slate-400">PAN Number</p>
+                <p className="font-semibold font-mono text-slate-800">{party.pan}</p>
+              </div>
+            )}
+            {party.bankDetails && (
+              <div>
+                <p className="text-slate-400">Banking / Settlement Details</p>
+                <p className="font-medium text-slate-800 text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  {party.bankDetails}
+                </p>
+              </div>
+            )}
             {party.address && (
               <div>
                 <p className="text-slate-400">Address</p>
@@ -667,23 +690,44 @@ export default function PartyProfileClient({
             )}
 
             <form onSubmit={handleRecordPayment} className="space-y-4 text-xs">
-              {/* Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Payment Amount (₹) <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="1"
-                    required
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-brand-500"
-                  />
+              {/* Amount & Kasar Discount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Payment Amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="1"
+                      required
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Kasar / Discount (₹)</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">Allowed</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={discountAllowed}
+                      onChange={(e) => setDiscountAllowed(e.target.value)}
+                      placeholder="0.00 (e.g. 50)"
+                      className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2 text-sm font-bold text-emerald-700 outline-none focus:border-emerald-500 bg-emerald-50/20"
+                    />
+                  </div>
                 </div>
               </div>
 

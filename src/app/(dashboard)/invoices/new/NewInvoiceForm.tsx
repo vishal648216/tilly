@@ -236,6 +236,13 @@ export default function NewInvoiceForm({
   const [salesperson, setSalesperson] = useState("");
   const [isCustomSalesperson, setIsCustomSalesperson] = useState(false);
 
+  // Transport & Logistics / E-Way Bill Fields
+  const [showTransportDetails, setShowTransportDetails] = useState(false);
+  const [ewayBillNo, setEwayBillNo] = useState("");
+  const [vehicleNo, setVehicleNo] = useState("");
+  const [transporterName, setTransporterName] = useState("");
+  const [lrNo, setLrNo] = useState("");
+
   // Lines State
   const [lines, setLines] = useState<Line[]>(
     initialData?.lines && initialData.lines.length > 0
@@ -656,6 +663,14 @@ export default function NewInvoiceForm({
           quickAction: action,
           isInterState,
           notes,
+          customFields: (ewayBillNo.trim() || vehicleNo.trim() || transporterName.trim() || lrNo.trim())
+            ? {
+                ewayBillNo: ewayBillNo.trim() || undefined,
+                vehicleNo: vehicleNo.trim().toUpperCase() || undefined,
+                transporterName: transporterName.trim() || undefined,
+                lrNo: lrNo.trim() || undefined,
+              }
+            : null,
           sourceDocType: initialData?.sourceDocType || null,
           sourceDocId: initialData?.sourceDocId || null,
           quotationId: initialData?.quotationId || null,
@@ -710,6 +725,10 @@ export default function NewInvoiceForm({
         setDiscountTotal(0);
         setFreightTotal(0);
         setOtherChargesTotal(0);
+        setEwayBillNo("");
+        setVehicleNo("");
+        setTransporterName("");
+        setLrNo("");
         setTimeout(() => setPartySuccessMsg(""), 5000);
       } else if (action === "SAVE_PRINT") {
         router.push(`/invoices/${data.invoice.id}`);
@@ -975,6 +994,81 @@ export default function NewInvoiceForm({
             </div>
           </div>
         )}
+
+        {/* Transport & Logistics / E-Way Bill (Optional) */}
+        <div className="border-t border-slate-100 pt-3">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowTransportDetails(!showTransportDetails)}
+              className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-brand-600 transition-colors cursor-pointer"
+            >
+              <Truck className="h-4 w-4 text-brand-600" />
+              <span>Transport & Logistics / E-Way Bill</span>
+              <span className="text-[11px] font-medium text-slate-400">
+                {showTransportDetails
+                  ? "(Click to collapse)"
+                  : ewayBillNo || vehicleNo
+                  ? "✓ Details Added"
+                  : "(Optional - Click to expand)"}
+              </span>
+            </button>
+            {(ewayBillNo || vehicleNo || transporterName || lrNo) && !showTransportDetails && (
+              <span className="text-[10px] bg-brand-50 text-brand-700 font-bold px-2 py-0.5 rounded-full">
+                {vehicleNo ? vehicleNo : "Transport Added"}
+              </span>
+            )}
+          </div>
+
+          {showTransportDetails && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 p-3.5 bg-slate-50/70 border border-slate-200/80 rounded-xl">
+              <div>
+                <label className="text-xs font-semibold text-slate-700">E-Way Bill Number</label>
+                <input
+                  type="text"
+                  maxLength={12}
+                  placeholder="e.g. 101234567890"
+                  className="input mt-1 w-full font-mono text-xs"
+                  value={ewayBillNo}
+                  onChange={(e) => setEwayBillNo(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Vehicle Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. GJ-01-AB-1234"
+                  className="input mt-1 w-full uppercase font-mono text-xs"
+                  value={vehicleNo}
+                  onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Transporter / Courier</label>
+                <input
+                  type="text"
+                  placeholder="e.g. SafeXpress, VRL, Self"
+                  className="input mt-1 w-full text-xs"
+                  value={transporterName}
+                  onChange={(e) => setTransporterName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">LR / Consignment #</label>
+                <input
+                  type="text"
+                  placeholder="e.g. LR-40918"
+                  className="input mt-1 w-full font-mono text-xs"
+                  value={lrNo}
+                  onChange={(e) => setLrNo(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Barcode Quick Scanner Banner */}

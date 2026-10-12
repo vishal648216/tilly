@@ -14,6 +14,8 @@ export interface RecordPaymentInput {
   partyId?: string;
   type: "RECEIPT" | "PAYMENT" | "ADVANCE" | "REFUND";
   amount: number;
+  discountAllowed?: number;
+  discountReceived?: number;
   date: Date;
   mode: "CASH" | "BANK" | "UPI" | "CARD" | "CHEQUE" | "OTHER";
   accountId?: string;
@@ -56,6 +58,8 @@ export async function recordPayment(input: RecordPaymentInput) {
     partyId,
     type,
     amount,
+    discountAllowed = 0,
+    discountReceived = 0,
     date,
     mode,
     accountId,
@@ -71,6 +75,12 @@ export async function recordPayment(input: RecordPaymentInput) {
   if (amount <= 0) {
     throw new Error("Payment amount must be greater than 0");
   }
+
+  const isReceipt = type === "RECEIPT" || (type as string) === "CUSTOMER_PAYMENT";
+  const settlementDiscount = roundTo2(
+    Math.max(0, isReceipt ? Number(discountAllowed || 0) : Number(discountReceived || 0))
+  );
+  const effectiveAvailable = roundTo2(amount + settlementDiscount);
 
   // 1. Validate party if provided
   let party = null;
@@ -122,15 +132,18 @@ export async function recordPayment(input: RecordPaymentInput) {
     }
   }
 
-  if (totalAllocated > amount + 0.01) {
-    throw new Error(`Total allocated amount (₹${totalAllocated}) exceeds payment amount (₹${amount})`);
+  if (totalAllocated > effectiveAvailable + 0.01) {
+    throw new Error(
+      `Total allocated amount (₹${totalAllocated}) exceeds payment plus settlement discount (₹${effectiveAvailable})`
+    );
   }
 
-  const unallocatedAmount = Math.max(0, roundTo2(amount - totalAllocated));
+  // Unallocated cash that goes to advance balance
+  const allocatedFromCash = Math.max(0, roundTo2(totalAllocated - settlementDiscount));
+  const unallocatedAmount = Math.max(0, roundTo2(amount - allocatedFromCash));
 
   // 3. Generate sequential payment number: PAY-YYYY-0001 or REC-YYYY-0001
   const year = date.getFullYear();
-  const isReceipt = type === "RECEIPT" || (type as string) === "CUSTOMER_PAYMENT";
   const pPrefix = isReceipt ? "REC" : "PAY";
   const pCount = await prisma.payment.count({ where: { companyId, type } });
   const paymentNo = `${pPrefix}-${year}-${String(pCount + 1).padStart(5, "0")}`;
@@ -164,8 +177,8 @@ export async function recordPayment(input: RecordPaymentInput) {
   // 6. Execute atomic transaction
   const result = await prisma.$transaction(async (tx) => {
     // A. Create Voucher
-    // For Receipt: Dr Cash/Bank [full amount], Cr Sundry Debtors [allocated], Cr Customer Advance [unallocated]
-    // For Payment: Dr Sundry Creditors [allocated], Dr Supplier Advance [unallocated], Cr Cash/Bank [full amount]
+    // For Receipt: Dr Cash/Bank [amount], Dr Discount Allowed [settlementDiscount], Cr Sundry Debtors [allocated], Cr Customer Advance [unallocated]
+    // For Payment: Dr Sundry Creditors [allocated], Dr Supplier Advance [unallocated], Cr Cash/Bank [amount], Cr Discount Received [settlementDiscount]
     const voucherEntries: Array<{ accountId: string; debit: Decimal; credit: Decimal }> = [];
 
     if (isReceipt) {
@@ -175,6 +188,16 @@ export async function recordPayment(input: RecordPaymentInput) {
         debit: new Decimal(amount),
         credit: new Decimal(0),
       });
+
+      // Dr Discount Allowed (5300)
+      if (settlementDiscount > 0) {
+        const discountAllowedAccountId = await ensureAccount(companyId, ["5300", "5001"]);
+        voucherEntries.push({
+          accountId: discountAllowedAccountId,
+          debit: new Decimal(settlementDiscount),
+          credit: new Decimal(0),
+        });
+      }
 
       // Cr Debtors for allocated part
       if (totalAllocated > 0) {
@@ -218,13 +241,23 @@ export async function recordPayment(input: RecordPaymentInput) {
         debit: new Decimal(0),
         credit: new Decimal(amount),
       });
+
+      // Cr Discount Received (4200)
+      if (settlementDiscount > 0) {
+        const discountReceivedAccountId = await ensureAccount(companyId, ["4200", "4100"]);
+        voucherEntries.push({
+          accountId: discountReceivedAccountId,
+          debit: new Decimal(0),
+          credit: new Decimal(settlementDiscount),
+        });
+      }
     }
 
     const narration =
       notes ||
-      `${isReceipt ? "Receipt" : "Payment"} ${paymentNo} of ₹${amount} via ${mode}${
-        reference ? ` (Ref: ${reference})` : ""
-      }${party ? ` from/to ${party.name}` : ""}`;
+      `${isReceipt ? "Receipt" : "Payment"} ${paymentNo} of ₹${amount}${
+        settlementDiscount > 0 ? ` (+₹${settlementDiscount} Kasar)` : ""
+      } via ${mode}${reference ? ` (Ref: ${reference})` : ""}${party ? ` from/to ${party.name}` : ""}`;
 
     const voucher = await tx.voucher.create({
       data: {

@@ -82,9 +82,74 @@ export default function NewPartyForm() {
       .catch(() => {});
   }, [form.type]);
 
+  // Structured Bank Details
+  const [bankName, setBankName] = useState("");
+  const [accountNo, setAccountNo] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [upiId, setUpiId] = useState("");
+
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function handleGstinChange(val: string) {
+    const cleanGstin = val.toUpperCase().trim();
+    setForm((f) => {
+      const next = { ...f, gstin: cleanGstin };
+      // Auto-extract 10-digit PAN (characters 3 to 12)
+      if (cleanGstin.length >= 12) {
+        const extractedPan = cleanGstin.slice(2, 12);
+        if (isValidPan(extractedPan) && (!f.pan || f.pan === f.gstin.slice(2, 12))) {
+          next.pan = extractedPan;
+        }
+      }
+      // Auto-detect State if empty from first 2 digits
+      if (cleanGstin.length >= 2 && !f.state) {
+        const stateCode = cleanGstin.slice(0, 2);
+        const GST_STATE_CODE_MAP: Record<string, string> = {
+          "01": "Jammu and Kashmir",
+          "02": "Himachal Pradesh",
+          "03": "Punjab",
+          "04": "Chandigarh",
+          "05": "Uttarakhand",
+          "06": "Haryana",
+          "07": "Delhi",
+          "08": "Rajasthan",
+          "09": "Uttar Pradesh",
+          "10": "Bihar",
+          "11": "Sikkim",
+          "12": "Arunachal Pradesh",
+          "13": "Nagaland",
+          "14": "Manipur",
+          "15": "Mizoram",
+          "16": "Tripura",
+          "17": "Meghalaya",
+          "18": "Assam",
+          "19": "West Bengal",
+          "20": "Jharkhand",
+          "21": "Odisha",
+          "22": "Chhattisgarh",
+          "23": "Madhya Pradesh",
+          "24": "Gujarat",
+          "26": "Dadra and Nagar Haveli and Daman and Diu",
+          "27": "Maharashtra",
+          "29": "Karnataka",
+          "30": "Goa",
+          "31": "Lakshadweep",
+          "32": "Kerala",
+          "33": "Tamil Nadu",
+          "34": "Puducherry",
+          "36": "Telangana",
+          "37": "Andhra Pradesh",
+          "38": "Ladakh",
+        };
+        if (GST_STATE_CODE_MAP[stateCode]) {
+          next.state = GST_STATE_CODE_MAP[stateCode];
+        }
+      }
+      return next;
+    });
+  }
 
   function update(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -198,7 +263,12 @@ export default function NewPartyForm() {
         creditDays: form.creditDays ? parseInt(form.creditDays) : 0,
         paymentTerms: form.paymentTerms.trim() || null,
         priceList: form.priceList,
-        bankDetails: form.bankDetails.trim() || null,
+        bankDetails: [
+          accountNo.trim() ? `A/C: ${accountNo.trim()}` : "",
+          ifscCode.trim() ? `IFSC: ${ifscCode.trim().toUpperCase()}` : "",
+          bankName.trim() ? `Bank: ${bankName.trim()}` : "",
+          upiId.trim() ? `UPI: ${upiId.trim()}` : "",
+        ].filter(Boolean).join(" | ") || form.bankDetails.trim() || null,
         salesperson: form.salesperson.trim() || null,
         notes: form.notes.trim() || null,
         tags: form.tags.trim() || null,
@@ -377,20 +447,28 @@ export default function NewPartyForm() {
               </div>
 
               <div>
-                <label className="label">GSTIN (15 Digits)</label>
+                <label className="label flex items-center justify-between">
+                  <span>GSTIN (15 Digits)</span>
+                  <span className="text-[11px] text-slate-400 font-normal">Auto-extracts PAN</span>
+                </label>
                 <input
                   type="text"
                   maxLength={15}
                   placeholder="e.g. 27ABCDE1234F1Z5"
                   className="input uppercase"
                   value={form.gstin}
-                  onChange={(e) => update("gstin", e.target.value.toUpperCase())}
+                  onChange={(e) => handleGstinChange(e.target.value)}
                   onBlur={() => handleBlur("gstin")}
                 />
               </div>
 
               <div>
-                <label className="label">PAN Number</label>
+                <label className="label flex items-center justify-between">
+                  <span>PAN Number</span>
+                  {form.gstin.length >= 12 && form.pan === form.gstin.slice(2, 12) && (
+                    <span className="text-[11px] text-emerald-600 font-medium">✓ Auto-filled from GSTIN</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   maxLength={10}
@@ -582,15 +660,53 @@ export default function NewPartyForm() {
                 />
               </div>
 
-              <div className="md:col-span-3">
-                <label className="label">Bank Account Details (for Vendor NEFT/RTGS)</label>
-                <input
-                  type="text"
-                  placeholder="Bank Name, A/C Number, IFSC Code"
-                  className="input"
-                  value={form.bankDetails}
-                  onChange={(e) => update("bankDetails", e.target.value)}
-                />
+              <div className="md:col-span-3 border-t border-slate-100 pt-4">
+                <label className="label font-bold text-slate-800 mb-2">
+                  Settlement & Banking Details (NEFT / RTGS / UPI)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">Bank Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. HDFC Bank, SBI"
+                      className="input mt-1"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">Account Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 5010023491823"
+                      className="input mt-1 font-mono"
+                      value={accountNo}
+                      onChange={(e) => setAccountNo(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">IFSC Code</label>
+                    <input
+                      type="text"
+                      maxLength={11}
+                      placeholder="e.g. HDFC0000128"
+                      className="input mt-1 uppercase font-mono"
+                      value={ifscCode}
+                      onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">Vendor UPI ID / VPA</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. party@okhdfcbank"
+                      className="input mt-1 font-mono"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="md:col-span-3">
